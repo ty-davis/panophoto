@@ -46,6 +46,7 @@ onMounted(() => initPersistence())
   <div v-else class="app">
     <header class="app-header">
       <div class="header-left">
+        <img src="/logo.svg" height="30px"/>
         <h1>PanoPhoto</h1>
       </div>
       <div class="header-center">
@@ -148,7 +149,7 @@ body {
 }
 
 .app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #37A81D 0%, #17B9FF 100%);
   color: white;
   padding: 0.75rem 1.5rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -158,9 +159,13 @@ body {
   gap: 0.75rem;
 }
 
-.header-left { flex-shrink: 0; }
+.header-left {
+  display: flex;
+}
 
 .app-header h1 {
+  display: inline;
+  padding: 0 0.5rem;
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
