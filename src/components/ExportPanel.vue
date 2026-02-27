@@ -43,7 +43,7 @@
           @click="handleShare"
           :disabled="isExporting || frames.length === 0"
         >
-          {{ isExporting ? 'Preparing…' : '📤 Share to Photos' }}
+          <i class="fa-solid fa-share-from-square"></i> {{ isExporting ? 'Preparing…' : 'Share to Photos' }}
         </button>
 
         <!-- ZIP download — primary on desktop, secondary fallback on mobile -->

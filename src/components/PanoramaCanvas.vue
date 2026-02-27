@@ -43,7 +43,7 @@
 
     <div v-if="selectedImageId" class="selection-toolbar">
       <button @click="handleDelete" class="toolbar-btn delete-btn" title="Delete (Del)">
-        <span>🗑️</span> Delete
+        <i class="fa-solid fa-trash"></i> Delete
       </button>
     </div>
   </div>
@@ -187,8 +187,14 @@ const startCornerResizeTouch = (event: TouchEvent, corner: ResizeCorner) => {
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
+// rAF-throttled render: at most one draw per display frame
+let _rafId = 0
 const render = () => {
-  if (canvasRef.value) renderPanorama(canvasRef.value, props.panorama, 1, selectedImageId.value)
+  if (_rafId) return
+  _rafId = requestAnimationFrame(() => {
+    _rafId = 0
+    if (canvasRef.value) renderPanorama(canvasRef.value, props.panorama, 1, selectedImageId.value)
+  })
 }
 
 // Map screen coords (CSS pixels) → canvas coordinate space

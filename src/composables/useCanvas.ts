@@ -14,8 +14,16 @@ export const useCanvas = () => {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    canvas.width = panorama.totalWidth * scale
-    canvas.height = panorama.maxHeight * scale
+    // Only reallocate the backing texture when dimensions actually change.
+    // Resetting canvas.width/height every frame destroys and recreates the GPU
+    // texture — extremely expensive on mobile.
+    const newWidth  = panorama.totalWidth * scale
+    const newHeight = panorama.maxHeight  * scale
+    if (canvas.width !== newWidth)  canvas.width  = newWidth
+    if (canvas.height !== newHeight) canvas.height = newHeight
+
+    // Clear without resizing
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     // Fill background
     ctx.fillStyle = panorama.backgroundColor
