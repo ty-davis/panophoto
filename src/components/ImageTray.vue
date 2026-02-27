@@ -28,6 +28,7 @@
         :key="image.id"
         class="tray-chip image-chip"
         @click="handleAdd(image.id)"
+        @touchstart="onChipTouchStart($event, image.id)"
       >
         <img :src="image.thumbnail || image.url" :alt="image.file.name" />
         <button class="chip-delete" @click.stop="handleRemove(image.id)" title="Remove">×</button>
@@ -41,6 +42,7 @@ import { ref } from 'vue'
 import { useImageStore } from '@/composables/useImageStore'
 import { usePanorama } from '@/composables/usePanorama'
 import { useCanvas } from '@/composables/useCanvas'
+import { isTouchDragActive, touchDropPending } from '@/composables/useTouchDropState'
 
 const emit = defineEmits<{ placed: [] }>()
 const collapsed = ref(false)
@@ -64,6 +66,112 @@ const handleAdd = (imageId: string) => {
 
 const handleRemove = (imageId: string) => {
   if (confirm('Remove this image?')) removeImage(imageId)
+}
+
+// ── Touch drag-to-canvas ──────────────────────────────────────────────────
+const DIR_THRESHOLD   = 6   // px before locking direction
+
+let _dragImageId: string | null = null
+let _dragStartX   = 0
+let _dragStartY   = 0
+let _dirLocked    = false
+let _isDragMode   = false
+let _ghost: HTMLDivElement | null = null
+
+const createGhost = (imageId: string, clientX: number, clientY: number): HTMLDivElement => {
+  const img = images.value.find(i => i.id === imageId)
+  const el  = document.createElement('div')
+  Object.assign(el.style, {
+    position:     'fixed',
+    left:         `${clientX}px`,
+    top:          `${clientY}px`,
+    width:        '72px',
+    height:       '72px',
+    transform:    'translate(-50%, -50%) scale(1.08)',
+    borderRadius: '10px',
+    overflow:     'hidden',
+    pointerEvents:'none',
+    zIndex:       '9999',
+    opacity:      '0.92',
+    boxShadow:    '0 8px 24px rgba(0,0,0,0.35)',
+    border:       '2px solid #4299e1',
+    background:   '#edf2f7',
+  })
+  if (img) {
+    const imgEl = document.createElement('img')
+    imgEl.src   = img.thumbnail || img.url
+    Object.assign(imgEl.style, { width: '100%', height: '100%', objectFit: 'cover' })
+    el.appendChild(imgEl)
+  }
+  return el
+}
+
+const cleanupTouchDrag = () => {
+  if (_ghost) { document.body.removeChild(_ghost); _ghost = null }
+  _dragImageId = null
+  _isDragMode  = false
+  _dirLocked   = false
+  isTouchDragActive.value = false
+  window.removeEventListener('touchmove', onChipTouchMove)
+  window.removeEventListener('touchend',  onChipTouchEnd)
+}
+
+const onChipTouchMove = (e: TouchEvent) => {
+  if (!_dragImageId || e.touches.length !== 1) return
+  const t  = e.touches[0]!
+  const dx = t.clientX - _dragStartX
+  const dy = t.clientY - _dragStartY
+  const dist = Math.sqrt(dx * dx + dy * dy)
+
+  if (!_dirLocked && dist > DIR_THRESHOLD) {
+    _dirLocked = true
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Predominantly horizontal → let the tray scroll naturally
+      cleanupTouchDrag()
+      return
+    }
+    // Predominantly vertical → drag mode
+    _isDragMode = true
+    isTouchDragActive.value = true
+  }
+
+  if (!_isDragMode) return
+  e.preventDefault()
+
+  if (!_ghost) {
+    _ghost = createGhost(_dragImageId, t.clientX, t.clientY)
+    document.body.appendChild(_ghost)
+  }
+  _ghost.style.left = `${t.clientX}px`
+  _ghost.style.top  = `${t.clientY}px`
+}
+
+const onChipTouchEnd = (e: TouchEvent) => {
+  const wasDrag = _isDragMode
+  const imageId = _dragImageId
+  const t       = e.changedTouches[0]!
+
+  if (wasDrag && imageId) {
+    // Suppress the synthetic click that follows touchend
+    const suppress = (ev: Event) => ev.preventDefault()
+    document.addEventListener('click', suppress, { once: true, capture: true })
+    touchDropPending.value = { imageId, clientX: t.clientX, clientY: t.clientY }
+  }
+  // If it was a tap (not drag), @click fires naturally → handleAdd
+
+  cleanupTouchDrag()
+}
+
+const onChipTouchStart = (event: TouchEvent, imageId: string) => {
+  if (event.touches.length !== 1) return
+  const t      = event.touches[0]!
+  _dragImageId = imageId
+  _dragStartX  = t.clientX
+  _dragStartY  = t.clientY
+  _dirLocked   = false
+  _isDragMode  = false
+  window.addEventListener('touchmove', onChipTouchMove, { passive: false })
+  window.addEventListener('touchend',  onChipTouchEnd)
 }
 </script>
 

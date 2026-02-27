@@ -1,5 +1,5 @@
 <template>
-  <div ref="wrapperRef" class="panorama-canvas-wrapper" @pointerdown.stop>
+  <div ref="wrapperRef" class="panorama-canvas-wrapper" @pointerdown.stop :class="{ 'drop-target': isTouchDragActive }">
     <canvas
       ref="canvasRef"
       class="panorama-canvas"
@@ -66,6 +66,7 @@ import { useCanvas } from '@/composables/useCanvas'
 import { useImageInteraction } from '@/composables/useImageInteraction'
 import { snapPosition, snapResizeResult, beginResizeSnap, endResizeSnap } from '@/composables/useSnapSettings'
 import type { SnapLine } from '@/composables/useSnapSettings'
+import { isTouchDragActive, touchDropPending } from '@/composables/useTouchDropState'
 
 const props = defineProps<{ panorama: Panorama }>()
 const emit  = defineEmits<{ update: [] }>()
@@ -390,12 +391,42 @@ onUnmounted(() => {
 
 watch(() => props.panorama, render, { deep: true })
 watch(selectedImageId, render)
+
+// Handle touch drops from the image tray
+watch(touchDropPending, (drop) => {
+  if (!drop || !canvasRef.value) return
+  const rect = canvasRef.value.getBoundingClientRect()
+  // Only accept if the finger landed inside the canvas
+  if (drop.clientX < rect.left || drop.clientX > rect.right ||
+      drop.clientY < rect.top  || drop.clientY > rect.bottom) {
+    touchDropPending.value = null
+    return
+  }
+  const x = (drop.clientX - rect.left) / displayScale.value
+  const y = (drop.clientY - rect.top)  / displayScale.value
+  addImageToPanorama(props.panorama, drop.imageId, { x, y })
+  render()
+  emit('update')
+  touchDropPending.value = null
+})
 </script>
 
 <style scoped>
 .panorama-canvas-wrapper {
   position: relative;
   display: inline-block;
+}
+
+/* Drop-target highlight while touch-dragging from the tray */
+.panorama-canvas-wrapper.drop-target::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px dashed #4299e1;
+  border-radius: 0.5rem;
+  background: rgba(66, 153, 225, 0.07);
+  pointer-events: none;
+  z-index: 8;
 }
 
 .panorama-canvas {
