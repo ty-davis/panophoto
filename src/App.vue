@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import ImageUploader from './components/ImageUploader.vue'
 import ImageLibrary from './components/ImageLibrary.vue'
 import CanvasEditor from './components/CanvasEditor.vue'
 import ExportPanel from './components/ExportPanel.vue'
@@ -82,7 +81,6 @@ onMounted(() => initPersistence())
 
     <div class="app-layout">
       <aside class="sidebar-left">
-        <ImageUploader />
         <ImageLibrary />
       </aside>
 

@@ -1,5 +1,6 @@
 <template>
   <div class="image-library">
+    <ImageUploader/>
     <div class="library-header">
       <h3>Images</h3>
       <span class="image-count">{{ images.length }}</span>
@@ -36,6 +37,7 @@
 import { useImageStore } from '@/composables/useImageStore'
 import { usePanorama } from '@/composables/usePanorama'
 import { useCanvas } from '@/composables/useCanvas'
+import ImageUploader from '@/components/ImageUploader.vue'
 
 const { images, removeImage } = useImageStore()
 const { panorama } = usePanorama()
