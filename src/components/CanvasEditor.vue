@@ -6,6 +6,15 @@
         <span class="canvas-size">{{ totalWidth }}×{{ maxHeight }}px</span>
       </div>
       <div class="header-right">
+        <div v-if="panorama" class="color-swatch-wrap" title="Background color">
+          <div class="swatch-preview" :style="{ background: panorama.backgroundColor }"></div>
+          <input
+            type="color"
+            class="color-input"
+            :value="panorama.backgroundColor"
+            @input="updateBgColor($event)"
+          />
+        </div>
         <div class="settings-wrap">
           <button class="settings-btn" @click="showSettings = !showSettings" title="Canvas settings">
             <i class="fa-solid fa-magnet"></i>
@@ -53,6 +62,10 @@ const { snapToBorders, snapToImages } = useSnapSettings()
 
 const showSettings = ref(false)
 
+const updateBgColor = (event: Event) => {
+  if (panorama.value) panorama.value.backgroundColor = (event.target as HTMLInputElement).value
+}
+
 const handlePanoramaUpdate = () => {
   // Trigger re-render if needed
 }
@@ -79,6 +92,40 @@ const handlePanoramaUpdate = () => {
 .header-right {
   display: flex;
   align-items: center;
+  gap: 0.25rem;
+}
+
+.color-swatch-wrap {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.swatch-preview {
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  border: 2px solid #cbd5e0;
+  box-sizing: border-box;
+  pointer-events: none;
+  transition: border-color 0.15s;
+}
+
+.color-swatch-wrap:hover .swatch-preview {
+  border-color: #4299e1;
+}
+
+.color-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  padding: 0;
+  border: none;
 }
 
 .settings-wrap {
