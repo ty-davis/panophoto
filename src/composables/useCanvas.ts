@@ -64,34 +64,18 @@ export const useCanvas = () => {
 
       ctx.restore()
 
-      // Draw selection indicator
+      // Draw selection outline (handles are rendered as HTML overlays)
       if (selectedImageId && placedImage.imageId === selectedImageId) {
         ctx.save()
         ctx.strokeStyle = '#4299e1'
-        ctx.lineWidth = 3 * scale
+        ctx.lineWidth = 2 * scale
         ctx.setLineDash([])
-        
-        const x = placedImage.x * scale
-        const y = placedImage.y * scale
-        const w = placedImage.width * scale
-        const h = placedImage.height * scale
-        
-        ctx.strokeRect(x, y, w, h)
-        
-        // Draw corner handles
-        const handleSize = 8 * scale
-        const positions: [number, number][] = [
-          [x, y], // top-left
-          [x + w, y], // top-right
-          [x, y + h], // bottom-left
-          [x + w, y + h] // bottom-right
-        ]
-        
-        ctx.fillStyle = '#4299e1'
-        positions.forEach(([px, py]) => {
-          ctx.fillRect(px - handleSize / 2, py - handleSize / 2, handleSize, handleSize)
-        })
-        
+        ctx.strokeRect(
+          placedImage.x * scale,
+          placedImage.y * scale,
+          placedImage.width  * scale,
+          placedImage.height * scale
+        )
         ctx.restore()
       }
     })

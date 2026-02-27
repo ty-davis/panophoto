@@ -25,6 +25,22 @@
       </div>
     </div>
 
+    <!-- Resize handle overlay (HTML so handles are always proper CSS-pixel size) -->
+    <div v-if="selectedImage" class="resize-overlay" :style="resizeOverlayStyle">
+      <!-- Desktop: 4 corner handles -->
+      <template v-if="!isTouchDevice">
+        <div class="handle h-tl" @mousedown="startCornerResize($event, 'tl')"></div>
+        <div class="handle h-tr" @mousedown="startCornerResize($event, 'tr')"></div>
+        <div class="handle h-bl" @mousedown="startCornerResize($event, 'bl')"></div>
+        <div class="handle h-br" @mousedown="startCornerResize($event, 'br')"></div>
+      </template>
+      <!-- Mobile: large handles at TL and BR only -->
+      <template v-else>
+        <div class="handle handle-touch h-tl" @touchstart="startCornerResizeTouch($event, 'tl')"></div>
+        <div class="handle handle-touch h-br" @touchstart="startCornerResizeTouch($event, 'br')"></div>
+      </template>
+    </div>
+
     <div v-if="selectedImageId" class="selection-toolbar">
       <button @click="handleDelete" class="toolbar-btn delete-btn" title="Delete (Del)">
         <span>🗑️</span> Delete
@@ -39,29 +55,20 @@ import type { Panorama, Frame } from '@/types'
 import { useCanvas } from '@/composables/useCanvas'
 import { useImageInteraction } from '@/composables/useImageInteraction'
 
-const props = defineProps<{
-  panorama: Panorama
-}>()
-
-const emit = defineEmits<{
-  update: []
-}>()
+const props = defineProps<{ panorama: Panorama }>()
+const emit  = defineEmits<{ update: [] }>()
 
 const { renderPanorama, addImageToPanorama, getImageAtPosition } = useCanvas()
 const {
-  selectedImageId,
-  isDragging,
-  selectImage,
-  startDrag,
-  updateDrag,
-  endDrag,
-  deleteSelected,
-  clearSelection
+  selectedImageId, isDragging,
+  selectImage, startDrag, updateDrag, endDrag,
+  startResize, updateResize, endResize,
+  deleteSelected, clearSelection
 } = useImageInteraction()
 
 const canvasRef = ref<HTMLCanvasElement>()
 
-// Viewport-aware base scale - caps to actual screen size so canvas fits on mobile
+// ── Viewport-aware base scale ──────────────────────────────────────────────
 const getViewportLimits = () => ({
   width:  Math.max(window.innerWidth  - 48, 200),
   height: Math.max(window.innerHeight * 0.55, 200)
@@ -77,10 +84,12 @@ const MAX_ZOOM = 4
 const displayScale = computed(() => {
   const maxW = Math.min(viewportLimits.value.width,  2400)
   const maxH = Math.min(viewportLimits.value.height, 900)
-  const widthScale  = maxW / props.panorama.totalWidth
-  const heightScale = maxH / props.panorama.maxHeight
-  return Math.min(widthScale, heightScale, 1) * userZoom.value
+  const base = Math.min(maxW / props.panorama.totalWidth, maxH / props.panorama.maxHeight, 1)
+  return base * userZoom.value
 })
+
+// Detect touch-primary device once on mount
+const isTouchDevice = ref(false)
 
 const canvasStyle = computed(() => {
   const scale = displayScale.value
@@ -109,13 +118,80 @@ const getFrameMarkerStyle = (frame: Frame) => {
   }
 }
 
-const render = () => {
-  if (canvasRef.value) {
-    renderPanorama(canvasRef.value, props.panorama, 1, selectedImageId.value)
+// ── Resize handle overlay ─────────────────────────────────────────────────
+const selectedImage = computed(() =>
+  selectedImageId.value
+    ? (props.panorama.placedImages.find(img => img.imageId === selectedImageId.value) ?? null)
+    : null
+)
+
+const resizeOverlayStyle = computed(() => {
+  const img = selectedImage.value
+  if (!img) return {}
+  const s = displayScale.value
+  return {
+    left:   `${img.x     * s}px`,
+    top:    `${img.y     * s}px`,
+    width:  `${img.width * s}px`,
+    height: `${img.height * s}px`
   }
+})
+
+type ResizeCorner = 'tl' | 'tr' | 'bl' | 'br'
+
+// Desktop: mousedown on handle → window mousemove/mouseup
+const startCornerResize = (event: MouseEvent, corner: ResizeCorner) => {
+  if (!selectedImage.value) return
+  event.stopPropagation()
+  event.preventDefault()
+  startResize(corner, selectedImage.value)
+
+  const onMove = (e: MouseEvent) => {
+    if (!selectedImage.value) return
+    const pos = updateResize(...Object.values(getCanvasCoordinates(e)) as [number, number])
+    if (pos) Object.assign(selectedImage.value, pos)
+    render()
+  }
+  const onUp = () => {
+    endResize()
+    emit('update')
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup',   onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup',   onUp)
 }
 
-// Map screen coords (CSS pixels) to canvas coordinate space
+// Mobile: touchstart on handle → window touchmove/touchend (non-passive)
+const startCornerResizeTouch = (event: TouchEvent, corner: ResizeCorner) => {
+  if (!selectedImage.value || event.touches.length !== 1) return
+  event.stopPropagation()
+  event.preventDefault()
+  startResize(corner, selectedImage.value)
+
+  const onMove = (e: TouchEvent) => {
+    if (!selectedImage.value || e.touches.length !== 1) return
+    e.preventDefault()
+    const pos = updateResize(...Object.values(getCanvasCoordinates(e.touches[0]!)) as [number, number])
+    if (pos) Object.assign(selectedImage.value, pos)
+    render()
+  }
+  const onEnd = () => {
+    endResize()
+    emit('update')
+    window.removeEventListener('touchmove', onMove)
+    window.removeEventListener('touchend',  onEnd)
+  }
+  window.addEventListener('touchmove', onMove, { passive: false })
+  window.addEventListener('touchend',  onEnd)
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+const render = () => {
+  if (canvasRef.value) renderPanorama(canvasRef.value, props.panorama, 1, selectedImageId.value)
+}
+
+// Map screen coords (CSS pixels) → canvas coordinate space
 const getCanvasCoordinates = (event: MouseEvent | Touch): { x: number; y: number } => {
   if (!canvasRef.value) return { x: 0, y: 0 }
   const rect  = canvasRef.value.getBoundingClientRect()
@@ -126,7 +202,7 @@ const getCanvasCoordinates = (event: MouseEvent | Touch): { x: number; y: number
   }
 }
 
-// Mouse handlers
+// ── Mouse handlers ────────────────────────────────────────────────────────
 const handleMouseDown = (event: MouseEvent) => {
   const { x, y } = getCanvasCoordinates(event)
   const clickedImage = getImageAtPosition(props.panorama, x, y)
@@ -154,8 +230,7 @@ const handleMouseUp = () => {
   if (isDragging.value) { endDrag(); emit('update') }
 }
 
-// Touch handlers - registered manually as non-passive so we can conditionally
-// call preventDefault (blocking scroll only when actually dragging an image or pinching)
+// ── Touch handlers (registered manually as non-passive) ───────────────────
 let pinchStartDistance = 0
 let pinchStartZoom     = 1
 
@@ -178,10 +253,9 @@ const handleTouchStart = (event: TouchEvent) => {
   if (clickedImage) {
     selectImage(clickedImage.imageId)
     startDrag(x, y, clickedImage)
-    event.preventDefault() // block scroll only while dragging an image
+    event.preventDefault()
   } else {
     clearSelection()
-    // no preventDefault -> container scrolls naturally with 1-finger pan
   }
   render()
 }
@@ -232,10 +306,10 @@ const handleKeyDown = (event: KeyboardEvent) => {
 }
 
 onMounted(() => {
+  isTouchDevice.value = window.matchMedia('(hover: none)').matches
   render()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('resize',  handleResize)
-  // Register as non-passive so we can call preventDefault when needed
   canvasRef.value?.addEventListener('touchstart', handleTouchStart, { passive: false })
   canvasRef.value?.addEventListener('touchmove',  handleTouchMove,  { passive: false })
 })
@@ -273,6 +347,61 @@ watch(selectedImageId, render)
   left: 0;
   pointer-events: none;
 }
+
+/* ── Resize handle overlay ─────────────────────────────────────────────── */
+.resize-overlay {
+  position: absolute;
+  pointer-events: none; /* overlay itself is transparent; children capture events */
+  z-index: 5;
+  /* selection outline drawn here as well as on canvas – clean CSS border */
+  outline: 2px solid #4299e1;
+}
+
+/* Shared handle base */
+.handle {
+  position: absolute;
+  pointer-events: all;
+  background: white;
+  border: 2px solid #4299e1;
+  box-sizing: border-box;
+}
+
+/* Desktop square handles (12 × 12 px, centred on each corner) */
+.h-tl { top: -6px;  left: -6px;  width: 12px; height: 12px; cursor: nw-resize; }
+.h-tr { top: -6px;  right: -6px; width: 12px; height: 12px; cursor: ne-resize; }
+.h-bl { bottom: -6px; left: -6px;  width: 12px; height: 12px; cursor: sw-resize; }
+.h-br { bottom: -6px; right: -6px; width: 12px; height: 12px; cursor: se-resize; }
+
+/* Mobile large circular handles (32 × 32 px) */
+.handle-touch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: white;
+  border: 3px solid #4299e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  /* diagonal resize arrow drawn with CSS */
+}
+.handle-touch::before {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid #4299e1;
+  border-bottom: 2px solid #4299e1;
+  transform: rotate(-45deg) translate(-1px, -1px);
+}
+/* TL handle arrow points the other way */
+.handle-touch.h-tl::before {
+  transform: rotate(135deg) translate(-1px, -1px);
+}
+/* Position: centred on corner */
+.handle-touch.h-tl { top: -16px;  left: -16px; }
+.handle-touch.h-br { bottom: -16px; right: -16px; }
 
 .frame-marker {
   position: absolute;
