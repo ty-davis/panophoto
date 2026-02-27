@@ -38,7 +38,7 @@ const activeTab = ref<Tab>('canvas')
         :class="{ active: activeTab === 'canvas' }"
         @click="activeTab = 'canvas'"
       >
-        <span class="tab-icon">✏️</span>
+        <i class="fa-solid fa-image tab-icon"></i>
         <span class="tab-label">Canvas</span>
       </button>
       <button
@@ -46,7 +46,7 @@ const activeTab = ref<Tab>('canvas')
         :class="{ active: activeTab === 'export' }"
         @click="activeTab = 'export'"
       >
-        <span class="tab-icon">💾</span>
+        <i class="fa-solid fa-file-export tab-icon"></i>
         <span class="tab-label">Export</span>
       </button>
     </nav>
