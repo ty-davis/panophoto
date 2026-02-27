@@ -1,6 +1,14 @@
 <template>
   <div class="image-tray">
-    <div class="tray-scroll">
+    <div class="tray-header" @click="collapsed = !collapsed">
+      <span class="tray-title">
+        <i class="fa-solid fa-images"></i> Photos
+      </span>
+      <button class="tray-toggle" :aria-label="collapsed ? 'Expand photos' : 'Collapse photos'">
+        <i class="fa-solid fa-chevron-down" :class="{ rotated: collapsed }"></i>
+      </button>
+    </div>
+    <div class="tray-scroll" v-show="!collapsed">
       <!-- Upload chip – acts as a file input label -->
       <label class="tray-chip upload-chip" title="Add photos">
         <input
@@ -29,11 +37,13 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useImageStore } from '@/composables/useImageStore'
 import { usePanorama } from '@/composables/usePanorama'
 import { useCanvas } from '@/composables/useCanvas'
 
 const emit = defineEmits<{ placed: [] }>()
+const collapsed = ref(false)
 
 const { images, addImages, removeImage } = useImageStore()
 const { panorama } = usePanorama()
@@ -65,6 +75,42 @@ const handleRemove = (imageId: string) => {
   /* hidden on desktop – the left sidebar handles images there */
   display: none;
 }
+
+.tray-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.75rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.tray-header:hover { background: #f7fafc; }
+
+.tray-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4a5568;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tray-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #a0aec0;
+  padding: 0.125rem 0.25rem;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+.tray-toggle:hover { color: #4a5568; }
+.tray-toggle i {
+  transition: transform 0.2s ease;
+}
+.tray-toggle i.rotated { transform: rotate(-180deg); }
 
 .tray-scroll {
   display: flex;

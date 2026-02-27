@@ -6,28 +6,28 @@ export const ASPECT_RATIOS: AspectRatio[] = [
     ratio: 1,
     width: 1080,
     height: 1080,
-    label: '1:1 Square'
+    label: '1:1'
   },
   {
     name: 'portrait',
     ratio: 4 / 5,
     width: 1080,
     height: 1350,
-    label: '4:5 Portrait'
+    label: '4:5'
   },
   {
     name: 'landscape',
     ratio: 16 / 9,
     width: 1080,
     height: 608,
-    label: '16:9 Landscape'
+    label: '16:9'
   },
   {
     name: 'story',
     ratio: 9 / 16,
     width: 1080,
     height: 1920,
-    label: '9:16 Story'
+    label: '9:16'
   }
 ]
 
