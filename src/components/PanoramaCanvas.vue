@@ -27,6 +27,10 @@
 
     <!-- Resize handle overlay (HTML so handles are always proper CSS-pixel size) -->
     <div v-if="selectedImage" class="resize-overlay" :style="resizeOverlayStyle">
+      <!-- Centered delete button -->
+      <button class="delete-btn" @click="handleDelete" title="Delete (Del)">
+        <i class="fa-solid fa-trash"></i>
+      </button>
       <!-- Desktop: 4 corner handles -->
       <template v-if="!isTouchDevice">
         <div class="handle h-tl" @mousedown="startCornerResize($event, 'tl')"></div>
@@ -41,11 +45,7 @@
       </template>
     </div>
 
-    <div v-if="selectedImageId" class="selection-toolbar">
-      <button @click="handleDelete" class="toolbar-btn delete-btn" title="Delete (Del)">
-        <i class="fa-solid fa-trash"></i> Delete
-      </button>
-    </div>
+
   </div>
 </template>
 
@@ -82,9 +82,8 @@ const MIN_ZOOM = 0.3
 const MAX_ZOOM = 4
 
 const displayScale = computed(() => {
-  const maxW = Math.min(viewportLimits.value.width,  2400)
   const maxH = Math.min(viewportLimits.value.height, 900)
-  const base = Math.min(maxW / props.panorama.totalWidth, maxH / props.panorama.maxHeight, 1)
+  const base = Math.min(maxH / props.panorama.maxHeight, 1)
   return base * userZoom.value
 })
 
@@ -447,41 +446,28 @@ watch(selectedImageId, render)
   border-radius: 0.25rem;
 }
 
-.selection-toolbar {
+.delete-btn {
   position: absolute;
-  bottom: -3rem;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
-  background: white;
-  border: 1px solid #cbd5e0;
-  border-radius: 0.5rem;
-  padding: 0.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  display: flex;
-  gap: 0.5rem;
-  z-index: 10;
-}
-
-.toolbar-btn {
-  padding: 0.5rem 1rem;
+  transform: translate(-50%, -50%);
+  width: 2.5rem;
+  height: 2.5rem;
+  background: rgba(229, 62, 62, 0.85);
+  color: white;
   border: none;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-  font-weight: 500;
+  border-radius: 50%;
+  font-size: 1rem;
   cursor: pointer;
-  transition: all 0.2s;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  pointer-events: all;
+  transition: background 0.15s, transform 0.15s;
+  backdrop-filter: blur(2px);
 }
-
-.delete-btn {
-  background: #fed7d7;
-  color: #c53030;
-}
-
 .delete-btn:hover {
-  background: #fc8181;
-  color: white;
+  background: rgba(197, 48, 48, 0.95);
+  transform: translate(-50%, -50%) scale(1.1);
 }
 </style>

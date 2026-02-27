@@ -46,13 +46,21 @@
           <button
             v-if="frames.length > 1"
             class="frame-delete"
-            @click="handleDeleteFrame(frame.id)"
+            @click="pendingDeleteId = frame.id"
             title="Remove frame"
           >×</button>
         </div>
       </div>
     </div>
   </div>
+
+  <ConfirmModal
+    v-if="pendingDeleteId"
+    message="Remove this frame?"
+    confirmLabel="Remove"
+    @confirm="confirmDelete"
+    @cancel="pendingDeleteId = null"
+  />
 </template>
 
 <script setup lang="ts">
@@ -60,11 +68,13 @@ import { ref } from 'vue'
 import { usePanorama } from '@/composables/usePanorama'
 import { ASPECT_RATIOS, getAspectRatioByName } from '@/utils/aspectRatios'
 import type { Frame } from '@/types'
+import ConfirmModal from './ConfirmModal.vue'
 
 const { frames, addFrame, removeFrame, updateFrameAspectRatio } = usePanorama()
 const aspectRatios = ASPECT_RATIOS
 const collapsed = ref(false)
 const selectedAspectRatio = ref('square')
+const pendingDeleteId = ref<string | null>(null)
 
 const addNewFrame = () => {
   addFrame(getAspectRatioByName(selectedAspectRatio.value))
@@ -83,8 +93,9 @@ const handleAspectRatioChange = (frameId: string, event: Event) => {
   updateFrameAspectRatio(frameId, (event.target as HTMLSelectElement).value)
 }
 
-const handleDeleteFrame = (frameId: string) => {
-  if (confirm('Remove this frame?')) removeFrame(frameId)
+const confirmDelete = () => {
+  if (pendingDeleteId.value) removeFrame(pendingDeleteId.value)
+  pendingDeleteId.value = null
 }
 </script>
 
