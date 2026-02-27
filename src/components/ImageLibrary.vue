@@ -1,10 +1,10 @@
 <template>
   <div class="image-library">
-    <ImageUploader/>
     <div class="library-header">
       <h3>Images</h3>
       <span class="image-count">{{ images.length }}</span>
     </div>
+    <ImageUploader/>
     
     <div class="image-grid">
       <div
@@ -72,7 +72,7 @@ const handleAdd = (imageId: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid #e2e8f0;
   flex-shrink: 0;
 }
@@ -87,7 +87,7 @@ const handleAdd = (imageId: string) => {
 .image-count {
   background: #edf2f7;
   color: #4a5568;
-  padding: 0.25rem 0.5rem;
+  padding: 0.15rem 0.5rem;
   border-radius: 0.25rem;
   font-size: 0.875rem;
   font-weight: 500;

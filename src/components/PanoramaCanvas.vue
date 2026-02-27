@@ -45,6 +45,16 @@
       </template>
     </div>
 
+    <!-- Snap guide lines -->
+    <div
+      v-for="line in activeSnapLines"
+      :key="`${line.axis}-${line.position}`"
+      class="snap-line"
+      :class="line.axis === 'x' ? 'snap-line-v' : 'snap-line-h'"
+      :style="line.axis === 'x'
+        ? { left: `${line.position * displayScale}px` }
+        : { top:  `${line.position * displayScale}px` }"
+    ></div>
 
   </div>
 </template>
@@ -54,6 +64,8 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import type { Panorama, Frame } from '@/types'
 import { useCanvas } from '@/composables/useCanvas'
 import { useImageInteraction } from '@/composables/useImageInteraction'
+import { snapPosition, snapCorner } from '@/composables/useSnapSettings'
+import type { SnapLine } from '@/composables/useSnapSettings'
 
 const props = defineProps<{ panorama: Panorama }>()
 const emit  = defineEmits<{ update: [] }>()
@@ -67,6 +79,7 @@ const {
 } = useImageInteraction()
 
 const canvasRef = ref<HTMLCanvasElement>()
+const activeSnapLines = ref<SnapLine[]>([])
 
 // ── Viewport-aware base scale ──────────────────────────────────────────────
 const getViewportLimits = () => ({
@@ -147,12 +160,17 @@ const startCornerResize = (event: MouseEvent, corner: ResizeCorner) => {
 
   const onMove = (e: MouseEvent) => {
     if (!selectedImage.value) return
-    const pos = updateResize(...Object.values(getCanvasCoordinates(e)) as [number, number])
+    let { x, y } = getCanvasCoordinates(e)
+    const cs = snapCorner(x, y, props.panorama, selectedImage.value.imageId)
+    x = cs.cx; y = cs.cy
+    activeSnapLines.value = cs.snapLines
+    const pos = updateResize(x, y)
     if (pos) Object.assign(selectedImage.value, pos)
     render()
   }
   const onUp = () => {
     endResize()
+    activeSnapLines.value = []
     emit('update')
     window.removeEventListener('mousemove', onMove)
     window.removeEventListener('mouseup',   onUp)
@@ -171,12 +189,17 @@ const startCornerResizeTouch = (event: TouchEvent, corner: ResizeCorner) => {
   const onMove = (e: TouchEvent) => {
     if (!selectedImage.value || e.touches.length !== 1) return
     e.preventDefault()
-    const pos = updateResize(...Object.values(getCanvasCoordinates(e.touches[0]!)) as [number, number])
+    let { x, y } = getCanvasCoordinates(e.touches[0]!)
+    const cs = snapCorner(x, y, props.panorama, selectedImage.value.imageId)
+    x = cs.cx; y = cs.cy
+    activeSnapLines.value = cs.snapLines
+    const pos = updateResize(x, y)
     if (pos) Object.assign(selectedImage.value, pos)
     render()
   }
   const onEnd = () => {
     endResize()
+    activeSnapLines.value = []
     emit('update')
     window.removeEventListener('touchmove', onMove)
     window.removeEventListener('touchend',  onEnd)
@@ -227,12 +250,17 @@ const handleMouseMove = (event: MouseEvent) => {
   const newPos = updateDrag(x, y)
   if (newPos) {
     const image = props.panorama.placedImages.find(img => img.imageId === selectedImageId.value)
-    if (image) { image.x = newPos.x; image.y = newPos.y; render() }
+    if (image) {
+      const snapped = snapPosition(newPos.x, newPos.y, image.width, image.height, props.panorama, image.imageId)
+      image.x = snapped.x; image.y = snapped.y
+      activeSnapLines.value = snapped.snapLines
+      render()
+    }
   }
 }
 
 const handleMouseUp = () => {
-  if (isDragging.value) { endDrag(); emit('update') }
+  if (isDragging.value) { endDrag(); activeSnapLines.value = []; emit('update') }
 }
 
 // ── Touch handlers (registered manually as non-passive) ───────────────────
@@ -278,12 +306,17 @@ const handleTouchMove = (event: TouchEvent) => {
   const newPos = updateDrag(x, y)
   if (newPos) {
     const image = props.panorama.placedImages.find(img => img.imageId === selectedImageId.value)
-    if (image) { image.x = newPos.x; image.y = newPos.y; render() }
+    if (image) {
+      const snapped = snapPosition(newPos.x, newPos.y, image.width, image.height, props.panorama, image.imageId)
+      image.x = snapped.x; image.y = snapped.y
+      activeSnapLines.value = snapped.snapLines
+      render()
+    }
   }
 }
 
 const handleTouchEnd = () => {
-  if (isDragging.value) { endDrag(); emit('update') }
+  if (isDragging.value) { endDrag(); activeSnapLines.value = []; emit('update') }
 }
 
 const handleDrop = (event: DragEvent) => {
@@ -469,5 +502,23 @@ watch(selectedImageId, render)
 .delete-btn:hover {
   background: rgba(197, 48, 48, 0.95);
   transform: translate(-50%, -50%) scale(1.1);
+}
+
+/* Snap guide lines */
+.snap-line {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  background: rgba(66, 153, 225, 0.75);
+}
+.snap-line-v { /* vertical line — x-axis snap */
+  top: 0;
+  width: 1px;
+  height: 100%;
+}
+.snap-line-h { /* horizontal line — y-axis snap */
+  left: 0;
+  width: 100%;
+  height: 1px;
 }
 </style>
