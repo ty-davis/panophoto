@@ -46,6 +46,9 @@ const { addImageToPanorama } = useCanvas()
 const handleDragStart = (event: DragEvent, imageId: string) => {
   event.dataTransfer!.effectAllowed = 'copy'
   event.dataTransfer!.setData('imageId', imageId)
+  // Center the drag ghost on the cursor so the drop point = visual center
+  const el = event.currentTarget as HTMLElement
+  event.dataTransfer!.setDragImage(el, el.offsetWidth / 2, el.offsetHeight / 2)
 }
 
 const handleRemove = (imageId: string) => {

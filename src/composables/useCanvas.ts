@@ -131,10 +131,13 @@ export const useCanvas = () => {
       height = width / imgAspect
     }
 
+    const cx = position ? position.x - width  / 2 : 0
+    const cy = position ? position.y - height / 2 : (panorama.maxHeight - height) / 2
+
     const placedImage: PlacedImage = {
       imageId,
-      x: position?.x ?? 0,
-      y: position?.y ?? (panorama.maxHeight - height) / 2,
+      x: Math.max(0, Math.min(cx, panorama.totalWidth  - width)),
+      y: Math.max(0, Math.min(cy, panorama.maxHeight - height)),
       width,
       height,
       rotation: 0,
