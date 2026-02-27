@@ -92,7 +92,7 @@ const handleExportAll = async () => {
 
 <style scoped>
 .export-panel {
-  width: 280px;
+  width: 100%;
   background: white;
   border-left: 1px solid #e2e8f0;
   display: flex;

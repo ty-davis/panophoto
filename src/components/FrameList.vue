@@ -76,10 +76,11 @@ const handleDeleteFrame = (frameId: string) => {
   background: white;
   border-top: 1px solid #e2e8f0;
   max-height: 180px;
+  flex-shrink: 0;
 }
 
 .frame-list-header {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 1rem;
   border-bottom: 1px solid #e2e8f0;
   font-weight: 600;
   color: #2d3748;
@@ -89,9 +90,10 @@ const handleDeleteFrame = (frameId: string) => {
 .frame-items {
   display: flex;
   gap: 1rem;
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   overflow-x: auto;
   flex: 1;
+  -webkit-overflow-scrolling: touch;
 }
 
 .frame-item {
@@ -147,8 +149,8 @@ const handleDeleteFrame = (frameId: string) => {
 }
 
 .frame-delete {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.75rem;
+  height: 1.75rem;
   background: #e53e3e;
   color: white;
   border: none;
@@ -164,5 +166,21 @@ const handleDeleteFrame = (frameId: string) => {
 
 .frame-delete:hover {
   background: #c53030;
+}
+
+@media (max-width: 768px) {
+  .frame-list {
+    max-height: 160px;
+  }
+
+  .frame-delete {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .frame-ratio-select {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
 }
 </style>

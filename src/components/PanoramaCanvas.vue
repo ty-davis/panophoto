@@ -9,6 +9,7 @@
       @mousemove="handleMouseMove"
       @mouseup="handleMouseUp"
       @mouseleave="handleMouseUp"
+      @touchend="handleTouchEnd"
       :style="canvasStyle"
     ></canvas>
     
@@ -47,12 +48,12 @@ const emit = defineEmits<{
 }>()
 
 const { renderPanorama, addImageToPanorama, getImageAtPosition } = useCanvas()
-const { 
-  selectedImageId, 
+const {
+  selectedImageId,
   isDragging,
-  selectImage, 
-  startDrag, 
-  updateDrag, 
+  selectImage,
+  startDrag,
+  updateDrag,
   endDrag,
   deleteSelected,
   clearSelection
@@ -60,20 +61,32 @@ const {
 
 const canvasRef = ref<HTMLCanvasElement>()
 
-const maxDisplayWidth = 2400
-const maxDisplayHeight = 600
+// Viewport-aware base scale - caps to actual screen size so canvas fits on mobile
+const getViewportLimits = () => ({
+  width:  Math.max(window.innerWidth  - 48, 200),
+  height: Math.max(window.innerHeight * 0.55, 200)
+})
+const viewportLimits = ref(getViewportLimits())
+const handleResize = () => { viewportLimits.value = getViewportLimits() }
+
+// User zoom level controlled by pinch gesture
+const userZoom = ref(1)
+const MIN_ZOOM = 0.3
+const MAX_ZOOM = 4
 
 const displayScale = computed(() => {
-  const widthScale = maxDisplayWidth / props.panorama.totalWidth
-  const heightScale = maxDisplayHeight / props.panorama.maxHeight
-  return Math.min(widthScale, heightScale, 1)
+  const maxW = Math.min(viewportLimits.value.width,  2400)
+  const maxH = Math.min(viewportLimits.value.height, 900)
+  const widthScale  = maxW / props.panorama.totalWidth
+  const heightScale = maxH / props.panorama.maxHeight
+  return Math.min(widthScale, heightScale, 1) * userZoom.value
 })
 
 const canvasStyle = computed(() => {
   const scale = displayScale.value
   return {
-    width: `${props.panorama.totalWidth * scale}px`,
-    height: `${props.panorama.maxHeight * scale}px`,
+    width:  `${props.panorama.totalWidth  * scale}px`,
+    height: `${props.panorama.maxHeight   * scale}px`,
     cursor: isDragging.value ? 'grabbing' : selectedImageId.value ? 'grab' : 'crosshair'
   }
 })
@@ -81,18 +94,18 @@ const canvasStyle = computed(() => {
 const markersStyle = computed(() => {
   const scale = displayScale.value
   return {
-    width: `${props.panorama.totalWidth * scale}px`,
-    height: `${props.panorama.maxHeight * scale}px`
+    width:  `${props.panorama.totalWidth  * scale}px`,
+    height: `${props.panorama.maxHeight   * scale}px`
   }
 })
 
 const getFrameMarkerStyle = (frame: Frame) => {
   const scale = displayScale.value
   return {
-    left: `${frame.xOffset * scale}px`,
-    width: `${frame.aspectRatio.width * scale}px`,
+    left:   `${frame.xOffset * scale}px`,
+    width:  `${frame.aspectRatio.width  * scale}px`,
     height: `${frame.aspectRatio.height * scale}px`,
-    top: `${((props.panorama.maxHeight - frame.aspectRatio.height) / 2) * scale}px`
+    top:    `${((props.panorama.maxHeight - frame.aspectRatio.height) / 2) * scale}px`
   }
 }
 
@@ -102,24 +115,21 @@ const render = () => {
   }
 }
 
-const getCanvasCoordinates = (event: MouseEvent): { x: number; y: number } => {
+// Map screen coords (CSS pixels) to canvas coordinate space
+const getCanvasCoordinates = (event: MouseEvent | Touch): { x: number; y: number } => {
   if (!canvasRef.value) return { x: 0, y: 0 }
-  
-  const rect = canvasRef.value.getBoundingClientRect()
+  const rect  = canvasRef.value.getBoundingClientRect()
   const scale = displayScale.value
-  
   return {
     x: (event.clientX - rect.left) / scale,
-    y: (event.clientY - rect.top) / scale
+    y: (event.clientY - rect.top)  / scale
   }
 }
 
+// Mouse handlers
 const handleMouseDown = (event: MouseEvent) => {
   const { x, y } = getCanvasCoordinates(event)
-  
-  // Check if clicking on an existing image
   const clickedImage = getImageAtPosition(props.panorama, x, y)
-  
   if (clickedImage) {
     selectImage(clickedImage.imageId)
     startDrag(x, y, clickedImage)
@@ -127,54 +137,88 @@ const handleMouseDown = (event: MouseEvent) => {
   } else {
     clearSelection()
   }
-  
   render()
 }
 
 const handleMouseMove = (event: MouseEvent) => {
   if (!isDragging.value || !selectedImageId.value) return
-  
   const { x, y } = getCanvasCoordinates(event)
   const newPos = updateDrag(x, y)
-  
   if (newPos) {
-    const image = props.panorama.placedImages.find(
-      (img) => img.imageId === selectedImageId.value
-    )
-    
-    if (image) {
-      image.x = newPos.x
-      image.y = newPos.y
-      render()
-    }
+    const image = props.panorama.placedImages.find(img => img.imageId === selectedImageId.value)
+    if (image) { image.x = newPos.x; image.y = newPos.y; render() }
   }
 }
 
 const handleMouseUp = () => {
-  if (isDragging.value) {
-    endDrag()
-    emit('update')
+  if (isDragging.value) { endDrag(); emit('update') }
+}
+
+// Touch handlers - registered manually as non-passive so we can conditionally
+// call preventDefault (blocking scroll only when actually dragging an image or pinching)
+let pinchStartDistance = 0
+let pinchStartZoom     = 1
+
+const getPinchDistance = (touches: TouchList): number => {
+  const dx = touches[0]!.clientX - touches[1]!.clientX
+  const dy = touches[0]!.clientY - touches[1]!.clientY
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+const handleTouchStart = (event: TouchEvent) => {
+  if (event.touches.length === 2) {
+    pinchStartDistance = getPinchDistance(event.touches)
+    pinchStartZoom     = userZoom.value
+    event.preventDefault()
+    return
   }
+  if (event.touches.length !== 1) return
+  const { x, y } = getCanvasCoordinates(event.touches[0]!)
+  const clickedImage = getImageAtPosition(props.panorama, x, y)
+  if (clickedImage) {
+    selectImage(clickedImage.imageId)
+    startDrag(x, y, clickedImage)
+    event.preventDefault() // block scroll only while dragging an image
+  } else {
+    clearSelection()
+    // no preventDefault -> container scrolls naturally with 1-finger pan
+  }
+  render()
+}
+
+const handleTouchMove = (event: TouchEvent) => {
+  if (event.touches.length === 2) {
+    event.preventDefault()
+    const ratio = getPinchDistance(event.touches) / pinchStartDistance
+    userZoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinchStartZoom * ratio))
+    return
+  }
+  if (!isDragging.value || !selectedImageId.value || event.touches.length !== 1) return
+  event.preventDefault()
+  const { x, y } = getCanvasCoordinates(event.touches[0]!)
+  const newPos = updateDrag(x, y)
+  if (newPos) {
+    const image = props.panorama.placedImages.find(img => img.imageId === selectedImageId.value)
+    if (image) { image.x = newPos.x; image.y = newPos.y; render() }
+  }
+}
+
+const handleTouchEnd = () => {
+  if (isDragging.value) { endDrag(); emit('update') }
 }
 
 const handleDrop = (event: DragEvent) => {
   if (!canvasRef.value) return
-  
   const imageId = event.dataTransfer?.getData('imageId')
   if (!imageId) return
-
   const { x, y } = getCanvasCoordinates(event as any)
-
   addImageToPanorama(props.panorama, imageId, { x, y })
   render()
   emit('update')
 }
 
 const handleDelete = () => {
-  if (deleteSelected(props.panorama)) {
-    render()
-    emit('update')
-  }
+  if (deleteSelected(props.panorama)) { render(); emit('update') }
 }
 
 const handleKeyDown = (event: KeyboardEvent) => {
@@ -190,10 +234,17 @@ const handleKeyDown = (event: KeyboardEvent) => {
 onMounted(() => {
   render()
   window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('resize',  handleResize)
+  // Register as non-passive so we can call preventDefault when needed
+  canvasRef.value?.addEventListener('touchstart', handleTouchStart, { passive: false })
+  canvasRef.value?.addEventListener('touchmove',  handleTouchMove,  { passive: false })
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('resize',  handleResize)
+  canvasRef.value?.removeEventListener('touchstart', handleTouchStart)
+  canvasRef.value?.removeEventListener('touchmove',  handleTouchMove)
 })
 
 watch(() => props.panorama, render, { deep: true })

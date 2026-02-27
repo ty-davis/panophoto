@@ -14,8 +14,11 @@
         @dragstart="handleDragStart($event, image.id)"
       >
         <img :src="image.thumbnail || image.url" :alt="image.file.name" />
-        <button class="delete-btn" @click="handleRemove(image.id)" title="Remove image">
+        <button class="delete-btn" @click.stop="handleRemove(image.id)" title="Remove image">
           ×
+        </button>
+        <button class="add-btn" @click.stop="handleAdd(image.id)" title="Add to canvas">
+          +
         </button>
         <div class="image-info">
           <span class="image-size">{{ image.width }}×{{ image.height }}</span>
@@ -31,8 +34,12 @@
 
 <script setup lang="ts">
 import { useImageStore } from '@/composables/useImageStore'
+import { usePanorama } from '@/composables/usePanorama'
+import { useCanvas } from '@/composables/useCanvas'
 
 const { images, removeImage } = useImageStore()
+const { panorama } = usePanorama()
+const { addImageToPanorama } = useCanvas()
 
 const handleDragStart = (event: DragEvent, imageId: string) => {
   event.dataTransfer!.effectAllowed = 'copy'
@@ -43,6 +50,10 @@ const handleRemove = (imageId: string) => {
   if (confirm('Remove this image?')) {
     removeImage(imageId)
   }
+}
+
+const handleAdd = (imageId: string) => {
+  addImageToPanorama(panorama.value, imageId)
 }
 </script>
 
@@ -61,6 +72,7 @@ const handleRemove = (imageId: string) => {
   justify-content: space-between;
   padding: 1rem;
   border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
 }
 
 .library-header h3 {
@@ -84,7 +96,7 @@ const handleRemove = (imageId: string) => {
   overflow-y: auto;
   padding: 1rem;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   gap: 0.75rem;
   align-content: start;
 }
@@ -111,10 +123,9 @@ const handleRemove = (imageId: string) => {
   object-fit: cover;
 }
 
-.delete-btn {
+.delete-btn,
+.add-btn {
   position: absolute;
-  top: 0.25rem;
-  right: 0.25rem;
   background: rgba(0, 0, 0, 0.7);
   color: white;
   border: none;
@@ -131,12 +142,29 @@ const handleRemove = (imageId: string) => {
   transition: opacity 0.2s;
 }
 
-.image-item:hover .delete-btn {
+.delete-btn {
+  top: 0.25rem;
+  right: 0.25rem;
+}
+
+.add-btn {
+  top: 0.25rem;
+  left: 0.25rem;
+  font-size: 1.1rem;
+  background: rgba(66, 153, 225, 0.85);
+}
+
+.image-item:hover .delete-btn,
+.image-item:hover .add-btn {
   opacity: 1;
 }
 
 .delete-btn:hover {
   background: rgba(220, 38, 38, 0.9);
+}
+
+.add-btn:hover {
+  background: rgba(49, 130, 206, 0.95);
 }
 
 .image-info {
@@ -168,5 +196,31 @@ const handleRemove = (imageId: string) => {
   color: #a0aec0;
   padding: 2rem;
   text-align: center;
+}
+
+/* On touch devices, always show action buttons */
+@media (hover: none) {
+  .delete-btn,
+  .add-btn {
+    opacity: 1;
+  }
+
+  .image-info {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .image-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .delete-btn,
+  .add-btn {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
 }
 </style>

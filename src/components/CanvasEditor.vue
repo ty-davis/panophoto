@@ -27,6 +27,8 @@
       />
     </div>
 
+    <ImageTray @placed="handlePanoramaUpdate" />
+
     <FrameList />
   </div>
 </template>
@@ -37,6 +39,7 @@ import { usePanorama } from '@/composables/usePanorama'
 import { ASPECT_RATIOS, getAspectRatioByName } from '@/utils/aspectRatios'
 import PanoramaCanvas from './PanoramaCanvas.vue'
 import FrameList from './FrameList.vue'
+import ImageTray from './ImageTray.vue'
 
 const { panorama, frames, totalWidth, maxHeight, addFrame } = usePanorama()
 const aspectRatios = ASPECT_RATIOS
@@ -64,16 +67,18 @@ const handlePanoramaUpdate = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
   background: white;
   border-bottom: 1px solid #e2e8f0;
-  gap: 1rem;
+  gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .frame-info {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .frame-count {
@@ -82,7 +87,7 @@ const handlePanoramaUpdate = () => {
 }
 
 .canvas-size {
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   color: #718096;
   font-family: 'Courier New', monospace;
 }
@@ -91,6 +96,7 @@ const handlePanoramaUpdate = () => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .aspect-ratio-selector {
@@ -103,6 +109,7 @@ const handlePanoramaUpdate = () => {
   font-weight: 500;
   color: #4a5568;
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .aspect-ratio-selector select {
@@ -139,9 +146,33 @@ const handlePanoramaUpdate = () => {
 .canvas-container {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
-  padding: 2rem;
+  padding: 1.5rem;
   overflow: auto;
+  min-height: 0;
+}
+
+@media (max-width: 768px) {
+  .editor-header {
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .frame-controls {
+    width: 100%;
+  }
+
+  .aspect-ratio-selector {
+    flex: 1;
+  }
+
+  .aspect-ratio-selector select {
+    flex: 1;
+  }
+
+  .canvas-container {
+    padding: 0.75rem;
+  }
 }
 </style>

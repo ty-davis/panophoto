@@ -75,7 +75,7 @@ const handleDrop = async (event: DragEvent) => {
 .upload-zone {
   border: 2px dashed #cbd5e0;
   border-radius: 0.5rem;
-  padding: 3rem 2rem;
+  padding: 2rem 1.5rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s;
@@ -93,16 +93,16 @@ const handleDrop = async (event: DragEvent) => {
 }
 
 .upload-icon {
-  width: 3rem;
-  height: 3rem;
-  margin: 0 auto 1rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin: 0 auto 0.75rem;
   color: #718096;
 }
 
 .upload-text {
   margin: 0.5rem 0;
   color: #2d3748;
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .upload-text strong {
@@ -110,8 +110,24 @@ const handleDrop = async (event: DragEvent) => {
 }
 
 .upload-hint {
-  margin: 0.5rem 0 0;
+  margin: 0.25rem 0 0;
   color: #718096;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 768px) {
+  .upload-zone {
+    padding: 1.25rem 1rem;
+  }
+
+  .upload-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .upload-text {
+    font-size: 0.85rem;
+  }
 }
 </style>
