@@ -8,7 +8,8 @@ export const useCanvas = () => {
     canvas: HTMLCanvasElement,
     panorama: Panorama,
     scale: number = 1,
-    selectedImageId?: string | null
+    selectedImageId?: string | null,
+    showFrameBoundaries: boolean = true
   ): void => {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -20,22 +21,24 @@ export const useCanvas = () => {
     ctx.fillStyle = panorama.backgroundColor
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    // Draw frame boundaries
-    ctx.strokeStyle = '#cbd5e0'
-    ctx.lineWidth = 2 * scale
-    ctx.setLineDash([10 * scale, 5 * scale])
-    
-    panorama.frames.forEach((frame, index) => {
-      if (index > 0) {
-        const x = frame.xOffset * scale
-        ctx.beginPath()
-        ctx.moveTo(x, 0)
-        ctx.lineTo(x, canvas.height)
-        ctx.stroke()
-      }
-    })
-    
-    ctx.setLineDash([])
+    // Draw frame boundaries (only for display, not export)
+    if (showFrameBoundaries) {
+      ctx.strokeStyle = '#cbd5e0'
+      ctx.lineWidth = 2 * scale
+      ctx.setLineDash([10 * scale, 5 * scale])
+      
+      panorama.frames.forEach((frame, index) => {
+        if (index > 0) {
+          const x = frame.xOffset * scale
+          ctx.beginPath()
+          ctx.moveTo(x, 0)
+          ctx.lineTo(x, canvas.height)
+          ctx.stroke()
+        }
+      })
+      
+      ctx.setLineDash([])
+    }
 
     // Draw placed images
     panorama.placedImages.forEach((placedImage) => {

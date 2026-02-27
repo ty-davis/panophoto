@@ -15,9 +15,9 @@ export const useExport = () => {
       throw new Error(`Frame ${frameIndex} not found`)
     }
 
-    // Create a full panorama canvas
+    // Create a full panorama canvas WITHOUT frame boundaries
     const fullCanvas = document.createElement('canvas')
-    renderPanorama(fullCanvas, panorama, 1)
+    renderPanorama(fullCanvas, panorama, 1, null, false)
 
     // Create a canvas for this specific frame
     const frameCanvas = document.createElement('canvas')
@@ -81,7 +81,7 @@ export const useExport = () => {
     options: ExportOptions
   ): Promise<Blob> => {
     const canvas = document.createElement('canvas')
-    renderPanorama(canvas, panorama, 1)
+    renderPanorama(canvas, panorama, 1, null, false)
 
     return new Promise((resolve, reject) => {
       canvas.toBlob(
