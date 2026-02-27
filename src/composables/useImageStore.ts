@@ -32,6 +32,16 @@ export const useImageStore = () => {
     images.value.push(...newImages)
   }
 
+  // Restore a previously-saved image with its original ID (used by persistence layer)
+  const restoreImage = async (id: string, blob: Blob, filename: string, type: string) => {
+    const file = new File([blob], filename, { type })
+    const url  = URL.createObjectURL(file)
+    const img  = await loadImage(file)
+    const thumbnail = await createThumbnail(img)
+    imageElements.value.set(id, img)
+    images.value.push({ id, file, url, thumbnail, width: img.width, height: img.height })
+  }
+
   const removeImage = (id: string) => {
     const image = images.value.find((img) => img.id === id)
     if (image) {
@@ -56,6 +66,7 @@ export const useImageStore = () => {
   return {
     images: computed(() => images.value),
     addImages,
+    restoreImage,
     removeImage,
     getImageElement,
     clearImages

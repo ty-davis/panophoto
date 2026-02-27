@@ -74,6 +74,25 @@ export const usePanorama = () => {
     panorama.value.backgroundColor = color
   }
 
+  const resetPanorama = () => {
+    panorama.value.frames = []
+    panorama.value.placedImages = []
+    panorama.value.backgroundColor = '#ffffff'
+    panorama.value.totalWidth = 0
+    panorama.value.maxHeight = 0
+    panorama.value.id = generateId()
+    addFrame()
+  }
+
+  const restorePanorama = (data: typeof panorama.value) => {
+    panorama.value.id            = data.id
+    panorama.value.frames        = data.frames
+    panorama.value.placedImages  = data.placedImages
+    panorama.value.backgroundColor = data.backgroundColor
+    panorama.value.totalWidth    = data.totalWidth
+    panorama.value.maxHeight     = data.maxHeight
+  }
+
   const getFrameAtPosition = (x: number): Frame | undefined => {
     return panorama.value.frames.find((frame, index) => {
       const nextFrame = panorama.value.frames[index + 1]
@@ -96,6 +115,8 @@ export const usePanorama = () => {
     removeFrame,
     updateFrameAspectRatio,
     updateBackground,
-    getFrameAtPosition
+    getFrameAtPosition,
+    resetPanorama,
+    restorePanorama
   }
 }
