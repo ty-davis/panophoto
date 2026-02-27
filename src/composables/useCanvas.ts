@@ -7,7 +7,8 @@ export const useCanvas = () => {
   const renderPanorama = (
     canvas: HTMLCanvasElement,
     panorama: Panorama,
-    scale: number = 1
+    scale: number = 1,
+    selectedImageId?: string | null
   ): void => {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -59,7 +60,61 @@ export const useCanvas = () => {
       )
 
       ctx.restore()
+
+      // Draw selection indicator
+      if (selectedImageId && placedImage.imageId === selectedImageId) {
+        ctx.save()
+        ctx.strokeStyle = '#4299e1'
+        ctx.lineWidth = 3 * scale
+        ctx.setLineDash([])
+        
+        const x = placedImage.x * scale
+        const y = placedImage.y * scale
+        const w = placedImage.width * scale
+        const h = placedImage.height * scale
+        
+        ctx.strokeRect(x, y, w, h)
+        
+        // Draw corner handles
+        const handleSize = 8 * scale
+        const positions: [number, number][] = [
+          [x, y], // top-left
+          [x + w, y], // top-right
+          [x, y + h], // bottom-left
+          [x + w, y + h] // bottom-right
+        ]
+        
+        ctx.fillStyle = '#4299e1'
+        positions.forEach(([px, py]) => {
+          ctx.fillRect(px - handleSize / 2, py - handleSize / 2, handleSize, handleSize)
+        })
+        
+        ctx.restore()
+      }
     })
+  }
+
+  const getImageAtPosition = (
+    panorama: Panorama,
+    x: number,
+    y: number
+  ): PlacedImage | null => {
+    // Check in reverse order (top to bottom)
+    for (let i = panorama.placedImages.length - 1; i >= 0; i--) {
+      const img = panorama.placedImages[i]
+      if (!img) continue
+      
+      if (
+        x >= img.x &&
+        x <= img.x + img.width &&
+        y >= img.y &&
+        y <= img.y + img.height
+      ) {
+        return img
+      }
+    }
+    
+    return null
   }
 
   const addImageToPanorama = (
@@ -100,6 +155,7 @@ export const useCanvas = () => {
 
   return {
     renderPanorama,
+    getImageAtPosition,
     addImageToPanorama,
     removeImageFromPanorama
   }

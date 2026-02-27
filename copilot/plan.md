@@ -33,17 +33,23 @@ Create a browser-based web application that allows users to create Instagram-rea
 - [x] Create image store/state management (reactive refs)
 - [x] Build thumbnail preview for uploaded images
 
-### Phase 3: Canvas & Layout Engine ⚠️ (Refactoring to Panoramic Canvas)
+### Phase 3: Canvas & Layout Engine ✅ Complete
 - [x] Create main canvas component with aspect ratio selector
 - [x] Implement canvas rendering system
-- [x] Build slide management (add/remove/reorder slides)
-- [ ] **REFACTOR: Continuous panoramic canvas approach**
-  - [ ] Change from individual slides to continuous horizontal canvas
-  - [ ] Add frame boundaries with visual markers
-  - [ ] Extend canvas width when adding frames
-  - [ ] Support mixed aspect ratios across frames
-- [ ] Create image positioning system (drag, scale, rotate on canvas)
-- [ ] Canvas scrolling/panning for long panoramas
+- [x] Build frame management (add/remove frames)
+- [x] **Continuous panoramic canvas approach**
+  - [x] Change from individual slides to continuous horizontal canvas
+  - [x] Add frame boundaries with visual markers
+  - [x] Extend canvas width when adding frames
+  - [x] Support mixed aspect ratios across frames
+- [x] **Image Interaction Controls**
+  - [x] Click to select placed images
+  - [x] Drag to move selected images
+  - [x] Delete selected images (keyboard or button)
+  - [x] Visual selection indicators (border + corner handles)
+- [ ] Advanced features (future)
+  - [ ] Scale and rotate controls
+  - [ ] Canvas scrolling/panning for long panoramas
 
 ### Phase 4: Export Functionality ⚠️ (Needs Update)
 - [x] Create canvas-to-image converter (toBlob/toDataURL)
