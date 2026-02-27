@@ -36,12 +36,24 @@
       </div>
 
       <div class="export-actions">
+        <!-- iOS / Web Share API path -->
         <button
-          class="btn-export btn-primary"
+          v-if="supportsFileShare"
+          class="btn-export btn-share"
+          @click="handleShare"
+          :disabled="isExporting || frames.length === 0"
+        >
+          {{ isExporting ? 'Preparing…' : '📤 Share to Photos' }}
+        </button>
+
+        <!-- ZIP download — primary on desktop, secondary fallback on mobile -->
+        <button
+          class="btn-export"
+          :class="supportsFileShare ? 'btn-secondary' : 'btn-primary'"
           @click="handleExportAll"
           :disabled="isExporting || frames.length === 0"
         >
-          {{ isExporting ? 'Exporting...' : 'Export All Frames' }}
+          {{ isExporting ? 'Exporting…' : supportsFileShare ? 'Download ZIP instead' : 'Export All Frames' }}
         </button>
       </div>
 
@@ -59,17 +71,36 @@ import { useExport } from '@/composables/useExport'
 import type { ExportOptions } from '@/types'
 
 const { panorama, frames, totalWidth, maxHeight } = usePanorama()
-const { exportAllFrames, downloadBlob } = useExport()
+const { exportAllFrames, shareFrames, canShareFiles, downloadBlob } = useExport()
 
 const exportFormat = ref<'png' | 'jpeg'>('png')
 const exportQuality = ref(0.95)
 const isExporting = ref(false)
 const exportError = ref('')
 
+const supportsFileShare = canShareFiles()
+
 const exportOptions = computed<ExportOptions>(() => ({
   format: exportFormat.value,
   quality: exportQuality.value
 }))
+
+const handleShare = async () => {
+  if (frames.value.length === 0) return
+  isExporting.value = true
+  exportError.value = ''
+  try {
+    await shareFrames(panorama.value, exportOptions.value)
+  } catch (error) {
+    // User cancelling the share sheet throws AbortError — don't treat that as a failure
+    if (error instanceof Error && error.name !== 'AbortError') {
+      exportError.value = error.message
+      console.error('Share error:', error)
+    }
+  } finally {
+    isExporting.value = false
+  }
+}
 
 const handleExportAll = async () => {
   if (frames.value.length === 0) return
@@ -192,6 +223,45 @@ const handleExportAll = async () => {
   width: 100%;
   padding: 0.75rem 1rem;
   font-weight: 600;
+}
+
+.btn-share {
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 1rem;
+}
+
+.btn-share:hover:not(:disabled) {
+  background: #5a67d8;
+}
+
+.btn-share:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: none;
+  color: #718096;
+  border: 1px solid #cbd5e0;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: #a0aec0;
+  color: #4a5568;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-primary {

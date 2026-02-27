@@ -121,10 +121,45 @@ export const useExport = () => {
     URL.revokeObjectURL(url)
   }
 
+  /** Returns true when the browser supports sharing File objects (iOS 15.4+, etc.) */
+  const canShareFiles = (): boolean => {
+    if (typeof navigator === 'undefined' || !navigator.share || !navigator.canShare) return false
+    try {
+      return navigator.canShare({ files: [new File([''], 'test.png', { type: 'image/png' })] })
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Share all frames via the native Web Share API (iOS share sheet → "Save to Photos").
+   * Falls back to a ZIP download on browsers that don't support file sharing.
+   */
+  const shareFrames = async (
+    panorama: Panorama,
+    options: ExportOptions = { format: 'png', quality: 0.95 }
+  ): Promise<void> => {
+    const extension = options.format === 'jpeg' ? 'jpg' : 'png'
+    const mimeType  = options.format === 'jpeg' ? 'image/jpeg' : 'image/png'
+
+    const fullCanvas = buildFullCanvas(panorama)
+    const files: File[] = []
+
+    for (let i = 0; i < panorama.frames.length; i++) {
+      const frameCanvas = extractFrameFromCanvas(fullCanvas, panorama, i)
+      const blob = await canvasToBlob(frameCanvas, options)
+      files.push(new File([blob], `frame-${i + 1}.${extension}`, { type: mimeType }))
+    }
+
+    await navigator.share({ files, title: 'PanoPhoto' })
+  }
+
   return {
     exportFrameToBlob,
     exportAllFrames,
     exportFullPanorama,
-    downloadBlob
+    downloadBlob,
+    canShareFiles,
+    shareFrames
   }
 }
