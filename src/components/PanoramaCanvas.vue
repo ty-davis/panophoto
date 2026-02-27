@@ -64,7 +64,7 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import type { Panorama, Frame } from '@/types'
 import { useCanvas } from '@/composables/useCanvas'
 import { useImageInteraction } from '@/composables/useImageInteraction'
-import { snapPosition, snapCorner } from '@/composables/useSnapSettings'
+import { snapPosition, snapResizeResult, beginResizeSnap, endResizeSnap } from '@/composables/useSnapSettings'
 import type { SnapLine } from '@/composables/useSnapSettings'
 
 const props = defineProps<{ panorama: Panorama }>()
@@ -156,20 +156,30 @@ const startCornerResize = (event: MouseEvent, corner: ResizeCorner) => {
   if (!selectedImage.value) return
   event.stopPropagation()
   event.preventDefault()
-  startResize(corner, selectedImage.value)
+
+  // Capture resize geometry once — mirrors the fixedX/Y logic in useImageInteraction
+  const img    = selectedImage.value
+  const fixedX = (corner === 'tl' || corner === 'bl') ? img.x + img.width  : img.x
+  const fixedY = (corner === 'tl' || corner === 'tr') ? img.y + img.height : img.y
+  const origW  = img.width
+  const origH  = img.height
+
+  startResize(corner, img)
+  beginResizeSnap()
 
   const onMove = (e: MouseEvent) => {
     if (!selectedImage.value) return
-    let { x, y } = getCanvasCoordinates(e)
-    const cs = snapCorner(x, y, props.panorama, selectedImage.value.imageId)
-    x = cs.cx; y = cs.cy
-    activeSnapLines.value = cs.snapLines
+    const { x, y } = getCanvasCoordinates(e)
     const pos = updateResize(x, y)
-    if (pos) Object.assign(selectedImage.value, pos)
+    if (!pos) return
+    const snapped = snapResizeResult(pos, fixedX, fixedY, origW, origH, corner, props.panorama, selectedImage.value.imageId)
+    Object.assign(selectedImage.value, snapped.result)
+    activeSnapLines.value = snapped.snapLines
     render()
   }
   const onUp = () => {
     endResize()
+    endResizeSnap()
     activeSnapLines.value = []
     emit('update')
     window.removeEventListener('mousemove', onMove)
@@ -184,21 +194,30 @@ const startCornerResizeTouch = (event: TouchEvent, corner: ResizeCorner) => {
   if (!selectedImage.value || event.touches.length !== 1) return
   event.stopPropagation()
   event.preventDefault()
-  startResize(corner, selectedImage.value)
+
+  const img    = selectedImage.value
+  const fixedX = (corner === 'tl' || corner === 'bl') ? img.x + img.width  : img.x
+  const fixedY = (corner === 'tl' || corner === 'tr') ? img.y + img.height : img.y
+  const origW  = img.width
+  const origH  = img.height
+
+  startResize(corner, img)
+  beginResizeSnap()
 
   const onMove = (e: TouchEvent) => {
     if (!selectedImage.value || e.touches.length !== 1) return
     e.preventDefault()
-    let { x, y } = getCanvasCoordinates(e.touches[0]!)
-    const cs = snapCorner(x, y, props.panorama, selectedImage.value.imageId)
-    x = cs.cx; y = cs.cy
-    activeSnapLines.value = cs.snapLines
+    const { x, y } = getCanvasCoordinates(e.touches[0]!)
     const pos = updateResize(x, y)
-    if (pos) Object.assign(selectedImage.value, pos)
+    if (!pos) return
+    const snapped = snapResizeResult(pos, fixedX, fixedY, origW, origH, corner, props.panorama, selectedImage.value.imageId)
+    Object.assign(selectedImage.value, snapped.result)
+    activeSnapLines.value = snapped.snapLines
     render()
   }
   const onEnd = () => {
     endResize()
+    endResizeSnap()
     activeSnapLines.value = []
     emit('update')
     window.removeEventListener('touchmove', onMove)
@@ -380,11 +399,11 @@ watch(selectedImageId, render)
 }
 
 .panorama-canvas {
-  border: 2px solid #cbd5e0;
+  box-shadow: 0 0 0 2px #cbd5e0,
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
   border-radius: 0.5rem;
   background: white;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -2px rgba(0, 0, 0, 0.05);
   display: block;
   user-select: none;
 }
