@@ -131,7 +131,6 @@ const handleExportAll = async () => {
 }
 
 .panel-header {
-  padding: 1rem;
   border-bottom: 1px solid #e2e8f0;
 }
 
@@ -140,6 +139,7 @@ const handleExportAll = async () => {
   font-size: 1.125rem;
   font-weight: 600;
   color: #2d3748;
+  padding: 0.75rem 1rem;
 }
 
 .panel-body {

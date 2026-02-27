@@ -53,13 +53,14 @@ const handlePanoramaUpdate = () => {
 
 .frame-info {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 0.75rem;
 }
 
 .frame-count {
   font-weight: 600;
   color: #2d3748;
+  font-size: 1.125rem;
 }
 
 .canvas-size {
