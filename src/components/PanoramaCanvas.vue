@@ -1,5 +1,5 @@
 <template>
-  <div class="panorama-canvas-wrapper">
+  <div ref="wrapperRef" class="panorama-canvas-wrapper" @pointerdown.stop>
     <canvas
       ref="canvasRef"
       class="panorama-canvas"
@@ -305,11 +305,20 @@ const handleKeyDown = (event: KeyboardEvent) => {
   }
 }
 
+// Deselect when tapping/clicking anywhere outside the canvas wrapper
+const handleDocumentPointerDown = () => {
+  if (selectedImageId.value) {
+    clearSelection()
+    render()
+  }
+}
+
 onMounted(() => {
   isTouchDevice.value = window.matchMedia('(hover: none)').matches
   render()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('resize',  handleResize)
+  document.addEventListener('pointerdown', handleDocumentPointerDown)
   canvasRef.value?.addEventListener('touchstart', handleTouchStart, { passive: false })
   canvasRef.value?.addEventListener('touchmove',  handleTouchMove,  { passive: false })
 })
@@ -317,6 +326,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('resize',  handleResize)
+  document.removeEventListener('pointerdown', handleDocumentPointerDown)
   canvasRef.value?.removeEventListener('touchstart', handleTouchStart)
   canvasRef.value?.removeEventListener('touchmove',  handleTouchMove)
 })
