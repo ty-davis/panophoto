@@ -124,6 +124,7 @@ const handleExportAll = async () => {
 <style scoped>
 .export-panel {
   width: 100%;
+  height: 100%;
   background: white;
   border-left: 1px solid #e2e8f0;
   display: flex;
@@ -216,7 +217,6 @@ const handleExportAll = async () => {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  margin-top: auto;
 }
 
 .btn-export {
