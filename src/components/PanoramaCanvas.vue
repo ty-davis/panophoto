@@ -574,15 +574,22 @@ const handleMouseMove = (event: MouseEvent) => {
   if (newPos) {
     const image = props.panorama.placedImages.find(img => img.imageId === selectedImageId.value)
     if (image) {
-      const vr = getVisibleRect({ ...image, x: newPos.x, y: newPos.y })
-      const snapped = snapPosition(vr.x, vr.y, vr.w, vr.h, props.panorama, image.imageId)
-      // Translate visible snap result back to full-box anchor
-      const crop = image.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
-      image.x = snapped.x - crop.left * image.width
-      image.y = snapped.y - crop.top  * image.height
-      // Template mode: recompute crop so visible area stays at the fixed slot rect
-      if (image.slotBinding) image.crop = recomputeSlotCrop(image)
-      activeSnapLines.value = snapped.snapLines
+      if (image.slotBinding) {
+        // Template mode: image moves freely behind the fixed slot rect — no snap,
+        // just clamp so the image always fully covers the slot.
+        const s = image.slotBinding
+        image.x = Math.min(Math.max(newPos.x, s.slotX + s.slotW - image.width), s.slotX)
+        image.y = Math.min(Math.max(newPos.y, s.slotY + s.slotH - image.height), s.slotY)
+        image.crop = recomputeSlotCrop(image)
+        activeSnapLines.value = []
+      } else {
+        const vr = getVisibleRect({ ...image, x: newPos.x, y: newPos.y })
+        const snapped = snapPosition(vr.x, vr.y, vr.w, vr.h, props.panorama, image.imageId)
+        const crop = image.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
+        image.x = snapped.x - crop.left * image.width
+        image.y = snapped.y - crop.top  * image.height
+        activeSnapLines.value = snapped.snapLines
+      }
       render()
     }
   }
@@ -636,13 +643,20 @@ const handleTouchMove = (event: TouchEvent) => {
   if (newPos) {
     const image = props.panorama.placedImages.find(img => img.imageId === selectedImageId.value)
     if (image) {
-      const vr = getVisibleRect({ ...image, x: newPos.x, y: newPos.y })
-      const snapped = snapPosition(vr.x, vr.y, vr.w, vr.h, props.panorama, image.imageId)
-      const crop = image.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
-      image.x = snapped.x - crop.left * image.width
-      image.y = snapped.y - crop.top  * image.height
-      if (image.slotBinding) image.crop = recomputeSlotCrop(image)
-      activeSnapLines.value = snapped.snapLines
+      if (image.slotBinding) {
+        const s = image.slotBinding
+        image.x = Math.min(Math.max(newPos.x, s.slotX + s.slotW - image.width), s.slotX)
+        image.y = Math.min(Math.max(newPos.y, s.slotY + s.slotH - image.height), s.slotY)
+        image.crop = recomputeSlotCrop(image)
+        activeSnapLines.value = []
+      } else {
+        const vr = getVisibleRect({ ...image, x: newPos.x, y: newPos.y })
+        const snapped = snapPosition(vr.x, vr.y, vr.w, vr.h, props.panorama, image.imageId)
+        const crop = image.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
+        image.x = snapped.x - crop.left * image.width
+        image.y = snapped.y - crop.top  * image.height
+        activeSnapLines.value = snapped.snapLines
+      }
       render()
     }
   }
@@ -652,31 +666,32 @@ const handleTouchEnd = () => {
   if (isDragging.value) { endDrag(); activeSnapLines.value = []; emit('update') }
 }
 
+// Shared helper: after placing an image, snap it to the nearest template slot if applicable
+const snapToTemplateSlot = (imageId: string, x: number, y: number) => {
+  const placed = props.panorama.placedImages.find(img => img.imageId === imageId)
+  if (!placed) return
+  const frame = props.panorama.frames.find(f =>
+    f.templateMode && f.templateSlots &&
+    x >= f.xOffset && x <= f.xOffset + f.aspectRatio.width
+  )
+  if (frame?.templateSlots && frame.templateGroupId) {
+    const slot = findNearestSlot(props.panorama, x, y, frame.templateGroupId)
+    if (slot) {
+      const fit = coverFitToSlot(placed.width, placed.height, slot.slotX, slot.slotY, slot.slotW, slot.slotH)
+      Object.assign(placed, fit)
+      placed.slotBinding = slot
+      placed.crop = recomputeSlotCrop(placed)
+    }
+  }
+}
+
 const handleDrop = (event: DragEvent) => {
   if (!canvasRef.value) return
   const imageId = event.dataTransfer?.getData('imageId')
   if (!imageId) return
   const { x, y } = getCanvasCoordinates(event as any)
   addImageToPanorama(props.panorama, imageId, { x, y })
-
-  // If dropped onto a template-mode frame, snap image to nearest slot
-  const placed = props.panorama.placedImages.find(img => img.imageId === imageId)
-  if (placed) {
-    const frame = props.panorama.frames.find(f => f.templateMode && f.templateSlots &&
-      x >= f.xOffset && x <= f.xOffset + f.aspectRatio.width)
-    if (frame?.templateSlots && frame.templateGroupId) {
-      const slot = findNearestSlot(props.panorama, x, y, frame.templateGroupId)
-      if (slot) {
-        // coverFitToSlot(naturalW, naturalH, slotX, slotY, slotW, slotH)
-        // We don't have natural dims here, use placed dimensions as proxy
-        const fit = coverFitToSlot(placed.width, placed.height, slot.slotX, slot.slotY, slot.slotW, slot.slotH)
-        Object.assign(placed, fit)
-        placed.slotBinding = slot
-        placed.crop = recomputeSlotCrop(placed)
-      }
-    }
-  }
-
+  snapToTemplateSlot(imageId, x, y)
   render()
   emit('update')
 }
@@ -740,6 +755,7 @@ watch(touchDropPending, (drop) => {
   const x = (drop.clientX - rect.left) / displayScale.value
   const y = (drop.clientY - rect.top)  / displayScale.value
   addImageToPanorama(props.panorama, drop.imageId, { x, y })
+  snapToTemplateSlot(drop.imageId, x, y)
   render()
   emit('update')
   touchDropPending.value = null
