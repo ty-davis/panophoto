@@ -127,8 +127,8 @@ export function snapResizeResult(
   const newVisW = result.width  * (1 - origCropLeft - origCropRight)
   const newVisH = result.height * (1 - origCropTop  - origCropBottom)
 
-  const movingX = rightMoves  ? visFixedX + newVisW : visFixedX
-  const movingY = bottomMoves ? visFixedY + newVisH : visFixedY
+  const movingX = rightMoves  ? visFixedX + newVisW : visFixedX - newVisW
+  const movingY = bottomMoves ? visFixedY + newVisH : visFixedY - newVisH
 
   const origFullW = origVisW / (1 - origCropLeft - origCropRight)
   const origFullH = origVisH / (1 - origCropTop  - origCropBottom)
