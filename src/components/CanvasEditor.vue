@@ -44,8 +44,6 @@
     </div>
 
     <ImageTray @placed="handlePanoramaUpdate" />
-
-    <FrameList />
   </div>
 </template>
 
@@ -54,7 +52,6 @@ import { ref } from 'vue'
 import { usePanorama } from '@/composables/usePanorama'
 import { useSnapSettings } from '@/composables/useSnapSettings'
 import PanoramaCanvas from './PanoramaCanvas.vue'
-import FrameList from './FrameList.vue'
 import ImageTray from './ImageTray.vue'
 
 const { panorama, frames, totalWidth, maxHeight } = usePanorama()

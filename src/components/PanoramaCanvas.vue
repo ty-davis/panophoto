@@ -1,5 +1,32 @@
 <template>
-  <div ref="wrapperRef" class="panorama-canvas-wrapper" @pointerdown.stop :class="{ 'drop-target': isTouchDragActive }">
+  <div class="canvas-area">
+    <!-- Per-frame controls row above the canvas -->
+    <div class="frame-controls-row" :style="frameControlsRowStyle">
+      <div
+        v-for="(frame, index) in panorama.frames"
+        :key="frame.id"
+        class="frame-ctrl"
+        :style="frameCtrlStyle(frame)"
+      >
+        <span class="frame-ctrl-num">{{ index + 1 }}</span>
+        <select
+          :value="frame.aspectRatio.name"
+          class="frame-ctrl-select"
+          @change="handleFrameRatioChange(frame.id, $event)"
+        >
+          <option v-for="r in aspectRatios" :key="r.name" :value="r.name">{{ r.label }}</option>
+        </select>
+        <button
+          v-if="panorama.frames.length > 1"
+          class="frame-ctrl-delete"
+          @click="pendingDeleteFrameId = frame.id"
+          title="Remove frame"
+        ><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>
+
+    <div class="canvas-row">
+      <div ref="wrapperRef" class="panorama-canvas-wrapper" @pointerdown.stop :class="{ 'drop-target': isTouchDragActive }">
     <canvas
       ref="canvasRef"
       class="panorama-canvas"
@@ -21,7 +48,6 @@
         :style="getFrameMarkerStyle(frame)"
       >
         <span class="frame-label">{{ index + 1 }}</span>
-        <span class="frame-size">{{ frame.aspectRatio.label }}</span>
       </div>
     </div>
 
@@ -82,7 +108,29 @@
         : { top:  `${line.position * displayScale}px` }"
     ></div>
 
-  </div>
+      </div><!-- .panorama-canvas-wrapper -->
+
+      <!-- Add frame button: square, to the right of the canvas -->
+      <div class="frame-add-ctrl" :style="addFrameCtrlStyle">
+        <button class="frame-add-btn" @click="addNewFrame" title="Add frame">
+          <i class="fa-solid fa-plus"></i>
+          <span>Add</span>
+        </button>
+        <select v-model="newFrameRatio" class="frame-add-select">
+          <option v-for="r in aspectRatios" :key="r.name" :value="r.name">{{ r.label }}</option>
+        </select>
+      </div>
+    </div><!-- .canvas-row -->
+
+  </div><!-- .canvas-area -->
+
+  <ConfirmModal
+    v-if="pendingDeleteFrameId"
+    message="Remove this frame?"
+    confirmLabel="Remove"
+    @confirm="confirmFrameDelete"
+    @cancel="pendingDeleteFrameId = null"
+  />
 </template>
 
 <script setup lang="ts">
@@ -94,6 +142,9 @@ import { useImageInteraction } from '@/composables/useImageInteraction'
 import { snapPosition, snapResizeResult, beginResizeSnap, endResizeSnap } from '@/composables/useSnapSettings'
 import type { SnapLine } from '@/composables/useSnapSettings'
 import { isTouchDragActive, touchDropPending } from '@/composables/useTouchDropState'
+import { usePanorama } from '@/composables/usePanorama'
+import { ASPECT_RATIOS, getAspectRatioByName } from '@/utils/aspectRatios'
+import ConfirmModal from './ConfirmModal.vue'
 
 const props = defineProps<{ panorama: Panorama }>()
 const emit  = defineEmits<{ update: [] }>()
@@ -108,6 +159,32 @@ const {
 
 const canvasRef = ref<HTMLCanvasElement>()
 const activeSnapLines = ref<SnapLine[]>([])
+
+// ── Frame management ──────────────────────────────────────────────────────
+const { addFrame, removeFrame, updateFrameAspectRatio } = usePanorama()
+const aspectRatios = ASPECT_RATIOS
+const newFrameRatio = ref('square')
+const pendingDeleteFrameId = ref<string | null>(null)
+
+const frameCtrlStyle = (frame: Frame) => ({
+  left:      `${(frame.xOffset + frame.aspectRatio.width / 2) * displayScale.value}px`,
+  transform: 'translateX(-50%)',
+})
+const frameControlsRowStyle = computed(() => ({
+  width: `${props.panorama.totalWidth * displayScale.value}px`,
+}))
+const addFrameCtrlStyle = computed(() => ({
+  width:  `${88}px`,
+  height: `${88}px`,
+}))
+const handleFrameRatioChange = (frameId: string, event: Event) => {
+  updateFrameAspectRatio(frameId, (event.target as HTMLSelectElement).value)
+}
+const addNewFrame = () => { addFrame(getAspectRatioByName(newFrameRatio.value)) }
+const confirmFrameDelete = () => {
+  if (pendingDeleteFrameId.value) removeFrame(pendingDeleteFrameId.value)
+  pendingDeleteFrameId.value = null
+}
 
 // ── Viewport-aware base scale ──────────────────────────────────────────────
 const getViewportLimits = () => ({
@@ -592,6 +669,123 @@ watch(touchDropPending, (drop) => {
 </script>
 
 <style scoped>
+.canvas-area {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* ── Frame controls row ─────────────────────────────────────────────────── */
+.frame-controls-row {
+  position: relative;
+  height: 40px;
+  flex-shrink: 0;
+  margin-bottom: 6px;
+}
+
+.frame-ctrl {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  white-space: nowrap;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+}
+
+.frame-ctrl-num {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #a0aec0;
+  flex-shrink: 0;
+}
+
+.frame-ctrl-select {
+  border: none;
+  width: 90px;
+  background: none;
+  font-size: 0.7rem;
+  color: #4a5568;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.frame-ctrl-select:focus { outline: none; }
+
+.frame-ctrl-delete {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  color: #e53e3e;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  font-size: 0.7rem;
+  padding: 0;
+  transition: background 0.12s;
+}
+.frame-ctrl-delete:hover { background: #fff5f5; }
+
+.canvas-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Add frame control ──────────────────────────────────────────────────── */
+.frame-add-ctrl {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border: 2px dashed #cbd5e0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #f7fafc;
+  transition: border-color 0.15s, background 0.15s;
+  box-sizing: border-box;
+}
+.frame-add-ctrl:hover {
+  border-color: #4299e1;
+  background: #ebf8ff;
+}
+
+.frame-add-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #4a5568;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0;
+  transition: color 0.15s;
+}
+.frame-add-btn:hover { color: #4299e1; }
+.frame-add-btn i { font-size: 0.8rem; }
+
+.frame-add-select {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  background: white;
+  font-size: 0.6rem;
+  padding: 2px 4px;
+  cursor: pointer;
+  color: #4a5568;
+  text-align: center;
+}
+.frame-add-select:focus { outline: none; }
+
 .panorama-canvas-wrapper {
   position: relative;
   display: inline-block;
@@ -698,15 +892,6 @@ watch(touchDropPending, (drop) => {
   font-weight: 700;
   color: rgba(66, 153, 225, 0.6);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.frame-size {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: rgba(66, 153, 225, 0.8);
-  background: rgba(255, 255, 255, 0.9);
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
 }
 
 .delete-btn {
