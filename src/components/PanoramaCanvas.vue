@@ -9,6 +9,12 @@
         :style="frameCtrlStyle(frame)"
       >
         <span class="frame-ctrl-num">{{ index + 1 }}</span>
+        <button
+          class="frame-ctrl-tmpl-btn"
+          :class="{ active: frame.templateMode }"
+          @click="openTemplatePicker(frame)"
+          title="Apply template"
+        ><i class="fa-solid fa-table-cells"></i></button>
         <select
           :value="frame.aspectRatio.name"
           class="frame-ctrl-select"
@@ -61,6 +67,13 @@
       <div v-if="showContextMenu" class="context-popover" @click.stop>
         <button class="context-item" @click="enterCropMode">
           <i class="fa-solid fa-crop-simple"></i> Crop
+        </button>
+        <button
+          v-if="selectedImage?.slotBinding"
+          class="context-item context-item-danger"
+          @click="handleExitTemplateMode"
+        >
+          <i class="fa-solid fa-arrow-right-from-bracket"></i> Exit Template
         </button>
       </div>
       <!-- Centered delete button -->
@@ -131,6 +144,14 @@
     @confirm="confirmFrameDelete"
     @cancel="pendingDeleteFrameId = null"
   />
+
+  <TemplatePickerModal
+    v-if="showTemplatePickerForFrame"
+    :frame="showTemplatePickerForFrame"
+    :panorama="panorama"
+    @apply="handleTemplateApply"
+    @cancel="showTemplatePickerForFrame = null"
+  />
 </template>
 
 <script setup lang="ts">
@@ -144,7 +165,10 @@ import type { SnapLine } from '@/composables/useSnapSettings'
 import { isTouchDragActive, touchDropPending } from '@/composables/useTouchDropState'
 import { usePanorama } from '@/composables/usePanorama'
 import { ASPECT_RATIOS, getAspectRatioByName } from '@/utils/aspectRatios'
+import { recomputeSlotCrop, coverFitToSlot, findNearestSlot, exitTemplateMode, applyTemplate } from '@/composables/useTemplateMode'
+import { TEMPLATES } from '@/data/templates'
 import ConfirmModal from './ConfirmModal.vue'
+import TemplatePickerModal from './TemplatePickerModal.vue'
 
 const props = defineProps<{ panorama: Panorama }>()
 const emit  = defineEmits<{ update: [] }>()
@@ -186,7 +210,33 @@ const confirmFrameDelete = () => {
   pendingDeleteFrameId.value = null
 }
 
-// ── Viewport-aware base scale ──────────────────────────────────────────────
+// ── Template picker ────────────────────────────────────────────────────────
+const showTemplatePickerForFrame = ref<Frame | null>(null)
+
+const openTemplatePicker = (frame: Frame) => {
+  showTemplatePickerForFrame.value = frame
+}
+
+const handleTemplateApply = (templateId: string, insertFrameIndex: number) => {
+  const template = TEMPLATES.find(t => t.id === templateId)
+  if (!template) return
+  applyTemplate({ panorama: props.panorama, template, insertIndex: insertFrameIndex })
+  showTemplatePickerForFrame.value = null
+  emit('update')
+  render()
+}
+
+const handleExitTemplateMode = () => {
+  const img = selectedImage.value
+  if (!img?.slotBinding) return
+  const groupId = img.slotBinding.templateGroupId
+  exitTemplateMode(props.panorama, groupId)
+  showContextMenu.value = false
+  emit('update')
+  render()
+}
+
+
 const getViewportLimits = () => ({
   width:  Math.max(window.innerWidth  - 48, 200),
   height: Math.max(window.innerHeight * 0.55, 200)
@@ -228,10 +278,12 @@ const markersStyle = computed(() => {
 const getFrameMarkerStyle = (frame: Frame) => {
   const scale = displayScale.value
   return {
-    left:   `${frame.xOffset * scale}px`,
-    width:  `${frame.aspectRatio.width  * scale}px`,
-    height: `${frame.aspectRatio.height * scale}px`,
-    top:    `${((props.panorama.maxHeight - frame.aspectRatio.height) / 2) * scale}px`
+    left:          `${frame.xOffset * scale}px`,
+    width:         `${frame.aspectRatio.width  * scale}px`,
+    height:        `${frame.aspectRatio.height * scale}px`,
+    top:           `${((props.panorama.maxHeight - frame.aspectRatio.height) / 2) * scale}px`,
+    borderColor:   frame.templateMode ? 'rgba(72, 187, 120, 0.5)' : 'rgba(66, 153, 225, 0.5)',
+    background:    frame.templateMode ? 'rgba(72, 187, 120, 0.04)' : 'rgba(66, 153, 225, 0.05)',
   }
 }
 
@@ -249,11 +301,13 @@ const resizeOverlayStyle = computed(() => {
   const vr = selectedVisibleRect.value
   if (!vr) return {}
   const s = displayScale.value
+  const isTemplate = !!selectedImage.value?.slotBinding
   return {
-    left:   `${vr.x * s}px`,
-    top:    `${vr.y * s}px`,
-    width:  `${vr.w * s}px`,
-    height: `${vr.h * s}px`
+    left:    `${vr.x * s}px`,
+    top:     `${vr.y * s}px`,
+    width:   `${vr.w * s}px`,
+    height:  `${vr.h * s}px`,
+    outline: `2px solid ${isTemplate ? '#48bb78' : '#4299e1'}`,
   }
 })
 
@@ -419,6 +473,7 @@ const startCornerResize = (event: MouseEvent, corner: ResizeCorner) => {
       corner, props.panorama, selectedImage.value.imageId
     )
     Object.assign(selectedImage.value, snapped.result)
+    if (selectedImage.value.slotBinding) selectedImage.value.crop = recomputeSlotCrop(selectedImage.value)
     activeSnapLines.value = snapped.snapLines
     render()
   }
@@ -461,6 +516,7 @@ const startCornerResizeTouch = (event: TouchEvent, corner: ResizeCorner) => {
       corner, props.panorama, selectedImage.value.imageId
     )
     Object.assign(selectedImage.value, snapped.result)
+    if (selectedImage.value.slotBinding) selectedImage.value.crop = recomputeSlotCrop(selectedImage.value)
     activeSnapLines.value = snapped.snapLines
     render()
   }
@@ -524,6 +580,8 @@ const handleMouseMove = (event: MouseEvent) => {
       const crop = image.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
       image.x = snapped.x - crop.left * image.width
       image.y = snapped.y - crop.top  * image.height
+      // Template mode: recompute crop so visible area stays at the fixed slot rect
+      if (image.slotBinding) image.crop = recomputeSlotCrop(image)
       activeSnapLines.value = snapped.snapLines
       render()
     }
@@ -583,6 +641,7 @@ const handleTouchMove = (event: TouchEvent) => {
       const crop = image.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
       image.x = snapped.x - crop.left * image.width
       image.y = snapped.y - crop.top  * image.height
+      if (image.slotBinding) image.crop = recomputeSlotCrop(image)
       activeSnapLines.value = snapped.snapLines
       render()
     }
@@ -599,6 +658,25 @@ const handleDrop = (event: DragEvent) => {
   if (!imageId) return
   const { x, y } = getCanvasCoordinates(event as any)
   addImageToPanorama(props.panorama, imageId, { x, y })
+
+  // If dropped onto a template-mode frame, snap image to nearest slot
+  const placed = props.panorama.placedImages.find(img => img.imageId === imageId)
+  if (placed) {
+    const frame = props.panorama.frames.find(f => f.templateMode && f.templateSlots &&
+      x >= f.xOffset && x <= f.xOffset + f.aspectRatio.width)
+    if (frame?.templateSlots && frame.templateGroupId) {
+      const slot = findNearestSlot(props.panorama, x, y, frame.templateGroupId)
+      if (slot) {
+        // coverFitToSlot(naturalW, naturalH, slotX, slotY, slotW, slotH)
+        // We don't have natural dims here, use placed dimensions as proxy
+        const fit = coverFitToSlot(placed.width, placed.height, slot.slotX, slot.slotY, slot.slotW, slot.slotH)
+        Object.assign(placed, fit)
+        placed.slotBinding = slot
+        placed.crop = recomputeSlotCrop(placed)
+      }
+    }
+  }
+
   render()
   emit('update')
 }
@@ -733,6 +811,25 @@ watch(touchDropPending, (drop) => {
 }
 .frame-ctrl-delete:hover { background: #fff5f5; }
 
+.frame-ctrl-tmpl-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  color: #a0aec0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  font-size: 0.7rem;
+  padding: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.frame-ctrl-tmpl-btn:hover { background: #ebf8ff; color: #3182ce; }
+.frame-ctrl-tmpl-btn.active { color: #38a169; background: #f0fff4; }
+
 .canvas-row {
   display: flex;
   align-items: center;
@@ -823,10 +920,9 @@ watch(touchDropPending, (drop) => {
 /* ── Resize handle overlay ─────────────────────────────────────────────── */
 .resize-overlay {
   position: absolute;
-  pointer-events: none; /* overlay itself is transparent; children capture events */
+  pointer-events: none;
   z-index: 5;
-  /* selection outline drawn here as well as on canvas – clean CSS border */
-  outline: 2px solid #4299e1;
+  /* outline is set dynamically via :style (green in template mode, blue otherwise) */
 }
 
 /* Shared handle base */
@@ -972,8 +1068,10 @@ watch(touchDropPending, (drop) => {
   transition: background 0.12s;
 }
 .context-item:hover { background: #f7fafc; }
+.context-item-danger { color: #e53e3e !important; }
+.context-item-danger:hover { background: #fff5f5 !important; }
 
-/* ── Crop overlay ────────────────────────────────────────────────────────── */
+
 .crop-overlay {
   position: absolute;
   pointer-events: none;

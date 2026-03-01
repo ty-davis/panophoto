@@ -19,7 +19,8 @@ export const usePanorama = () => {
     const newFrame: Frame = {
       id: generateId(),
       aspectRatio: ratio,
-      xOffset: panorama.value.totalWidth
+      xOffset: panorama.value.totalWidth,
+      templateMode: false,
     }
     
     panorama.value.frames.push(newFrame)

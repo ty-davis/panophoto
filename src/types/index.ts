@@ -22,6 +22,48 @@ export interface ImageCrop {
   bottom: number
 }
 
+// ── Template types ────────────────────────────────────────────────────────────
+
+/**
+ * A single placeholder slot within a Template.
+ * x/y/w/h are fractions of the template's own combined canvas
+ * (templateTotalWidth × templateMaxHeight), so slots can span frame boundaries.
+ */
+export interface TemplateSlot {
+  id: string
+  x: number  // fraction of template totalWidth
+  y: number  // fraction of template maxHeight
+  w: number
+  h: number
+}
+
+/**
+ * Unified template type — works for single-frame and multi-frame templates.
+ * frames.length === 1 for a single-frame template.
+ * Slots with w > (1/frames.length) span multiple frames.
+ */
+export interface Template {
+  id: string
+  name: string
+  frames: Array<{ aspectRatio: AspectRatio }>
+  slots: TemplateSlot[]
+}
+
+/**
+ * Canvas-space slot rect stored on a PlacedImage when in template mode.
+ * Stays fixed while the image moves freely behind it.
+ */
+export interface TemplateSlotBinding {
+  templateGroupId: string  // shared by all frames from the same template application
+  slotId: string
+  slotX: number   // canvas-space pixels
+  slotY: number
+  slotW: number
+  slotH: number
+}
+
+// ── Image types ───────────────────────────────────────────────────────────────
+
 export interface PlacedImage {
   imageId: string
   x: number
@@ -31,6 +73,7 @@ export interface PlacedImage {
   rotation: number
   scale: number
   crop?: ImageCrop
+  slotBinding?: TemplateSlotBinding  // present only when frame is in template mode
 }
 
 /** Returns the visible (cropped) rect in canvas-space coordinates. */
@@ -49,6 +92,10 @@ export interface Frame {
   id: string
   aspectRatio: AspectRatio
   xOffset: number
+  templateMode: boolean            // is this frame in template mode?
+  templateGroupId?: string         // shared id for all frames from the same template application
+  templateId?: string              // which Template was applied
+  templateSlots?: TemplateSlotBinding[]  // canvas-space slot rects snapshot at apply-time
 }
 
 export interface Panorama {
