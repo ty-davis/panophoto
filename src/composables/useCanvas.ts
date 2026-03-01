@@ -1,4 +1,5 @@
 import type { Panorama, PlacedImage } from '@/types'
+import { getVisibleRect } from '@/types'
 import { useImageStore } from './useImageStore'
 
 export const useCanvas = () => {
@@ -62,28 +63,41 @@ export const useCanvas = () => {
       ctx.rotate((placedImage.rotation * Math.PI) / 180)
       ctx.scale(placedImage.scale, placedImage.scale)
 
-      ctx.drawImage(
-        img,
-        (-placedImage.width / 2) * scale,
-        (-placedImage.height / 2) * scale,
-        placedImage.width * scale,
-        placedImage.height * scale
-      )
+      const crop = placedImage.crop
+      if (crop) {
+        // 9-arg drawImage: source region → destination region
+        const srcW  = img.naturalWidth
+        const srcH  = img.naturalHeight
+        const sx    = crop.left   * srcW
+        const sy    = crop.top    * srcH
+        const sw    = srcW  * (1 - crop.left - crop.right)
+        const sh    = srcH  * (1 - crop.top  - crop.bottom)
+        // Destination: centred on the full image centre, offset by the crop inset
+        const visW  = placedImage.width  * (1 - crop.left - crop.right)
+        const visH  = placedImage.height * (1 - crop.top  - crop.bottom)
+        const dstX  = (crop.left - 0.5) * placedImage.width  * scale   // relative to center
+        const dstY  = (crop.top  - 0.5) * placedImage.height * scale
+        ctx.drawImage(img, sx, sy, sw, sh, dstX, dstY, visW * scale, visH * scale)
+      } else {
+        ctx.drawImage(
+          img,
+          (-placedImage.width / 2) * scale,
+          (-placedImage.height / 2) * scale,
+          placedImage.width * scale,
+          placedImage.height * scale
+        )
+      }
 
       ctx.restore()
 
-      // Draw selection outline (handles are rendered as HTML overlays)
+      // Draw selection outline around the VISIBLE rect
       if (selectedImageId && placedImage.imageId === selectedImageId) {
+        const vr = getVisibleRect(placedImage)
         ctx.save()
         ctx.strokeStyle = '#4299e1'
         ctx.lineWidth = 2 * scale
         ctx.setLineDash([])
-        ctx.strokeRect(
-          placedImage.x * scale,
-          placedImage.y * scale,
-          placedImage.width  * scale,
-          placedImage.height * scale
-        )
+        ctx.strokeRect(vr.x * scale, vr.y * scale, vr.w * scale, vr.h * scale)
         ctx.restore()
       }
     })
@@ -99,11 +113,10 @@ export const useCanvas = () => {
       const img = panorama.placedImages[i]
       if (!img) continue
       
+      const vr = getVisibleRect(img)
       if (
-        x >= img.x &&
-        x <= img.x + img.width &&
-        y >= img.y &&
-        y <= img.y + img.height
+        x >= vr.x && x <= vr.x + vr.w &&
+        y >= vr.y && y <= vr.y + vr.h
       ) {
         return img
       }

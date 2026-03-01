@@ -26,7 +26,17 @@
     </div>
 
     <!-- Resize handle overlay (HTML so handles are always proper CSS-pixel size) -->
-    <div v-if="selectedImage" class="resize-overlay" :style="resizeOverlayStyle">
+    <div v-if="selectedImage && !isCropMode" class="resize-overlay" :style="resizeOverlayStyle">
+      <!-- Context menu button (hamburger) — centered -->
+      <button class="context-btn" @click.stop="showContextMenu = !showContextMenu" title="Image options">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <!-- Context popover -->
+      <div v-if="showContextMenu" class="context-popover" @click.stop>
+        <button class="context-item" @click="enterCropMode">
+          <i class="fa-solid fa-crop-simple"></i> Crop
+        </button>
+      </div>
       <!-- Centered delete button -->
       <button class="delete-btn" @click="handleDelete" title="Delete (Del)">
         <i class="fa-solid fa-trash"></i>
@@ -43,6 +53,22 @@
         <div class="handle handle-touch h-tl" @touchstart="startCornerResizeTouch($event, 'tl')"></div>
         <div class="handle handle-touch h-br" @touchstart="startCornerResizeTouch($event, 'br')"></div>
       </template>
+    </div>
+
+    <!-- Crop mode overlay -->
+    <div v-if="selectedImage && isCropMode" class="crop-overlay" :style="cropOverlayStyle">
+      <!-- Dark mask regions (the 4 trimmed strips) -->
+      <div class="crop-mask crop-mask-top"    :style="{ height: `${(selectedImage.crop?.top    ?? 0) * 100}%` }"></div>
+      <div class="crop-mask crop-mask-bottom" :style="{ height: `${(selectedImage.crop?.bottom ?? 0) * 100}%` }"></div>
+      <div class="crop-mask crop-mask-left"   :style="{ width:  `${(selectedImage.crop?.left   ?? 0) * 100}%`, top: `${(selectedImage.crop?.top ?? 0) * 100}%`, bottom: `${(selectedImage.crop?.bottom ?? 0) * 100}%` }"></div>
+      <div class="crop-mask crop-mask-right"  :style="{ width:  `${(selectedImage.crop?.right  ?? 0) * 100}%`, top: `${(selectedImage.crop?.top ?? 0) * 100}%`, bottom: `${(selectedImage.crop?.bottom ?? 0) * 100}%` }"></div>
+      <!-- 4 draggable edge bars -->
+      <div class="crop-bar crop-bar-top"    :style="cropBarStyles.top"    @mousedown="startCropDrag($event, 'top')"    @touchstart="startCropDrag($event, 'top')"></div>
+      <div class="crop-bar crop-bar-bottom" :style="cropBarStyles.bottom" @mousedown="startCropDrag($event, 'bottom')" @touchstart="startCropDrag($event, 'bottom')"></div>
+      <div class="crop-bar crop-bar-left"   :style="cropBarStyles.left"   @mousedown="startCropDrag($event, 'left')"   @touchstart="startCropDrag($event, 'left')"></div>
+      <div class="crop-bar crop-bar-right"  :style="cropBarStyles.right"  @mousedown="startCropDrag($event, 'right')"  @touchstart="startCropDrag($event, 'right')"></div>
+      <!-- Done button -->
+      <button class="crop-done-btn" @click.stop="exitCropMode">Done</button>
     </div>
 
     <!-- Snap guide lines -->
@@ -62,6 +88,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import type { Panorama, Frame } from '@/types'
+import { getVisibleRect } from '@/types'
 import { useCanvas } from '@/composables/useCanvas'
 import { useImageInteraction } from '@/composables/useImageInteraction'
 import { snapPosition, snapResizeResult, beginResizeSnap, endResizeSnap } from '@/composables/useSnapSettings'
@@ -75,7 +102,7 @@ const { renderPanorama, addImageToPanorama, getImageAtPosition } = useCanvas()
 const {
   selectedImageId, isDragging,
   selectImage, startDrag, updateDrag, endDrag,
-  startResize, updateResize, endResize,
+  startResize, endResize,
   deleteSelected, clearSelection
 } = useImageInteraction()
 
@@ -138,19 +165,155 @@ const selectedImage = computed(() =>
     : null
 )
 
+// Visible (cropped) rect of the selected image in canvas-space
+const selectedVisibleRect = computed(() => selectedImage.value ? getVisibleRect(selectedImage.value) : null)
+
 const resizeOverlayStyle = computed(() => {
+  const vr = selectedVisibleRect.value
+  if (!vr) return {}
+  const s = displayScale.value
+  return {
+    left:   `${vr.x * s}px`,
+    top:    `${vr.y * s}px`,
+    width:  `${vr.w * s}px`,
+    height: `${vr.h * s}px`
+  }
+})
+
+// ── Crop mode ─────────────────────────────────────────────────────────────
+const cropModeImageId  = ref<string | null>(null)
+const showContextMenu  = ref(false)
+
+const isCropMode = computed(() => cropModeImageId.value !== null && cropModeImageId.value === selectedImageId.value)
+
+const enterCropMode = () => {
+  if (!selectedImageId.value) return
+  // Ensure crop is initialised
+  const img = selectedImage.value
+  if (img && !img.crop) img.crop = { left: 0, top: 0, right: 0, bottom: 0 }
+  cropModeImageId.value = selectedImageId.value
+  showContextMenu.value = false
+}
+
+const exitCropMode = () => {
+  cropModeImageId.value = null
+  emit('update')
+}
+
+// Crop bar overlay style (positioned at full image box)
+const cropOverlayStyle = computed(() => {
   const img = selectedImage.value
   if (!img) return {}
   const s = displayScale.value
   return {
-    left:   `${img.x     * s}px`,
-    top:    `${img.y     * s}px`,
-    width:  `${img.width * s}px`,
+    left:   `${img.x      * s}px`,
+    top:    `${img.y      * s}px`,
+    width:  `${img.width  * s}px`,
     height: `${img.height * s}px`
   }
 })
 
+// Position of each crop bar within the crop overlay (in CSS %)
+const cropBarStyles = computed(() => {
+  const img = selectedImage.value
+  if (!img) return { top: {}, bottom: {}, left: {}, right: {} }
+  const c = img.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
+  return {
+    top:    { top:    `calc(${c.top    * 100}% - 6px)`, left: '0', right: '0', height: '12px', cursor: 'ns-resize' },
+    bottom: { bottom: `calc(${c.bottom * 100}% - 6px)`, left: '0', right: '0', height: '12px', cursor: 'ns-resize' },
+    left:   { left:   `calc(${c.left   * 100}% - 6px)`, top: '0', bottom: '0', width: '12px', cursor: 'ew-resize' },
+    right:  { right:  `calc(${c.right  * 100}% - 6px)`, top: '0', bottom: '0', width: '12px', cursor: 'ew-resize' },
+  }
+})
+
+type CropEdge = 'top' | 'bottom' | 'left' | 'right'
+
+const startCropDrag = (event: MouseEvent | TouchEvent, edge: CropEdge) => {
+  const img = selectedImage.value
+  if (!img || !img.crop) return
+  event.stopPropagation()
+  event.preventDefault()
+
+  const isTouch = event instanceof TouchEvent
+  const getClient = (e: MouseEvent | TouchEvent) =>
+    e instanceof TouchEvent ? { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY }
+                            : { x: e.clientX,              y: e.clientY }
+
+  const startClient = getClient(event)
+  const startCrop   = { ...img.crop }
+  const imgW = img.width
+  const imgH = img.height
+
+  const onMove = (e: MouseEvent | TouchEvent) => {
+    if (e instanceof TouchEvent) e.preventDefault()
+    const { x, y } = getClient(e)
+    const dx = (x - startClient.x) / displayScale.value
+    const dy = (y - startClient.y) / displayScale.value
+
+    const c = img.crop!
+    if (edge === 'top') {
+      c.top    = Math.max(0, Math.min(startCrop.top    + dy / imgH, 1 - startCrop.bottom - 0.05))
+    } else if (edge === 'bottom') {
+      c.bottom = Math.max(0, Math.min(startCrop.bottom - dy / imgH, 1 - startCrop.top    - 0.05))
+    } else if (edge === 'left') {
+      c.left   = Math.max(0, Math.min(startCrop.left   + dx / imgW, 1 - startCrop.right  - 0.05))
+    } else {
+      c.right  = Math.max(0, Math.min(startCrop.right  - dx / imgW, 1 - startCrop.left   - 0.05))
+    }
+    render()
+  }
+
+  const onEnd = () => {
+    emit('update')
+    window.removeEventListener('mousemove', onMove as any)
+    window.removeEventListener('mouseup',   onEnd)
+    window.removeEventListener('touchmove', onMove as any)
+    window.removeEventListener('touchend',  onEnd)
+  }
+
+  if (isTouch) {
+    window.addEventListener('touchmove', onMove as any, { passive: false })
+    window.addEventListener('touchend',  onEnd)
+  } else {
+    window.addEventListener('mousemove', onMove as any)
+    window.addEventListener('mouseup',   onEnd)
+  }
+}
+
 type ResizeCorner = 'tl' | 'tr' | 'bl' | 'br'
+
+const MIN_IMAGE_SIZE = 50 // canvas pixels
+
+/**
+ * Compute a full-box resize result using the VISIBLE rect geometry.
+ * Scale = distance(cursor, visibleFixed) / origVisDiagonal.
+ * This is the correct approach when handles are on visible rect corners.
+ */
+const computeResize = (
+  cx: number, cy: number,
+  visFixedX: number, visFixedY: number,
+  origVr: { w: number; h: number },
+  origImg: { width: number; height: number; crop?: { left: number; top: number; right: number; bottom: number } },
+  corner: ResizeCorner
+): { x: number; y: number; width: number; height: number } => {
+  const crop = origImg.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
+  const origVisDiag = Math.sqrt(origVr.w ** 2 + origVr.h ** 2)
+  const dist  = Math.sqrt((cx - visFixedX) ** 2 + (cy - visFixedY) ** 2)
+  const minScale = MIN_IMAGE_SIZE / Math.min(origVr.w, origVr.h)
+  const scale = Math.max(dist / origVisDiag, minScale)
+
+  const newVisW = origVr.w * scale
+  const newVisH = origVr.h * scale
+  const newW    = newVisW / (1 - crop.left - crop.right)
+  const newH    = newVisH / (1 - crop.top  - crop.bottom)
+
+  const rightMoves  = corner === 'br' || corner === 'tr'
+  const bottomMoves = corner === 'br' || corner === 'bl'
+  const newX = rightMoves  ? visFixedX - crop.left * newW         : visFixedX - newW * (1 - crop.right)
+  const newY = bottomMoves ? visFixedY - crop.top  * newH         : visFixedY - newH * (1 - crop.bottom)
+
+  return { x: newX, y: newY, width: newW, height: newH }
+}
 
 // Desktop: mousedown on handle → window mousemove/mouseup
 const startCornerResize = (event: MouseEvent, corner: ResizeCorner) => {
@@ -158,12 +321,13 @@ const startCornerResize = (event: MouseEvent, corner: ResizeCorner) => {
   event.stopPropagation()
   event.preventDefault()
 
-  // Capture resize geometry once — mirrors the fixedX/Y logic in useImageInteraction
-  const img    = selectedImage.value
-  const fixedX = (corner === 'tl' || corner === 'bl') ? img.x + img.width  : img.x
-  const fixedY = (corner === 'tl' || corner === 'tr') ? img.y + img.height : img.y
-  const origW  = img.width
-  const origH  = img.height
+  const img = selectedImage.value
+  const vr  = getVisibleRect(img)
+  const c   = img.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
+  const visFixedX = (corner === 'tl' || corner === 'bl') ? vr.x + vr.w : vr.x
+  const visFixedY = (corner === 'tl' || corner === 'tr') ? vr.y + vr.h : vr.y
+  const origVr  = { w: vr.w, h: vr.h }
+  const origImg = { width: img.width, height: img.height, crop: { ...c } }
 
   startResize(corner, img)
   beginResizeSnap()
@@ -171,16 +335,18 @@ const startCornerResize = (event: MouseEvent, corner: ResizeCorner) => {
   const onMove = (e: MouseEvent) => {
     if (!selectedImage.value) return
     const { x, y } = getCanvasCoordinates(e)
-    const pos = updateResize(x, y)
-    if (!pos) return
-    const snapped = snapResizeResult(pos, fixedX, fixedY, origW, origH, corner, props.panorama, selectedImage.value.imageId)
+    const pos = computeResize(x, y, visFixedX, visFixedY, origVr, origImg, corner)
+    const snapped = snapResizeResult(
+      pos, visFixedX, visFixedY, origVr.w, origVr.h,
+      c.left, c.top, c.right, c.bottom,
+      corner, props.panorama, selectedImage.value.imageId
+    )
     Object.assign(selectedImage.value, snapped.result)
     activeSnapLines.value = snapped.snapLines
     render()
   }
   const onUp = () => {
-    endResize()
-    endResizeSnap()
+    endResize(); endResizeSnap()
     activeSnapLines.value = []
     emit('update')
     window.removeEventListener('mousemove', onMove)
@@ -196,11 +362,13 @@ const startCornerResizeTouch = (event: TouchEvent, corner: ResizeCorner) => {
   event.stopPropagation()
   event.preventDefault()
 
-  const img    = selectedImage.value
-  const fixedX = (corner === 'tl' || corner === 'bl') ? img.x + img.width  : img.x
-  const fixedY = (corner === 'tl' || corner === 'tr') ? img.y + img.height : img.y
-  const origW  = img.width
-  const origH  = img.height
+  const img = selectedImage.value
+  const vr  = getVisibleRect(img)
+  const c   = img.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
+  const visFixedX = (corner === 'tl' || corner === 'bl') ? vr.x + vr.w : vr.x
+  const visFixedY = (corner === 'tl' || corner === 'tr') ? vr.y + vr.h : vr.y
+  const origVr  = { w: vr.w, h: vr.h }
+  const origImg = { width: img.width, height: img.height, crop: { ...c } }
 
   startResize(corner, img)
   beginResizeSnap()
@@ -209,16 +377,18 @@ const startCornerResizeTouch = (event: TouchEvent, corner: ResizeCorner) => {
     if (!selectedImage.value || e.touches.length !== 1) return
     e.preventDefault()
     const { x, y } = getCanvasCoordinates(e.touches[0]!)
-    const pos = updateResize(x, y)
-    if (!pos) return
-    const snapped = snapResizeResult(pos, fixedX, fixedY, origW, origH, corner, props.panorama, selectedImage.value.imageId)
+    const pos = computeResize(x, y, visFixedX, visFixedY, origVr, origImg, corner)
+    const snapped = snapResizeResult(
+      pos, visFixedX, visFixedY, origVr.w, origVr.h,
+      c.left, c.top, c.right, c.bottom,
+      corner, props.panorama, selectedImage.value.imageId
+    )
     Object.assign(selectedImage.value, snapped.result)
     activeSnapLines.value = snapped.snapLines
     render()
   }
   const onEnd = () => {
-    endResize()
-    endResizeSnap()
+    endResize(); endResizeSnap()
     activeSnapLines.value = []
     emit('update')
     window.removeEventListener('touchmove', onMove)
@@ -271,8 +441,12 @@ const handleMouseMove = (event: MouseEvent) => {
   if (newPos) {
     const image = props.panorama.placedImages.find(img => img.imageId === selectedImageId.value)
     if (image) {
-      const snapped = snapPosition(newPos.x, newPos.y, image.width, image.height, props.panorama, image.imageId)
-      image.x = snapped.x; image.y = snapped.y
+      const vr = getVisibleRect({ ...image, x: newPos.x, y: newPos.y })
+      const snapped = snapPosition(vr.x, vr.y, vr.w, vr.h, props.panorama, image.imageId)
+      // Translate visible snap result back to full-box anchor
+      const crop = image.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
+      image.x = snapped.x - crop.left * image.width
+      image.y = snapped.y - crop.top  * image.height
       activeSnapLines.value = snapped.snapLines
       render()
     }
@@ -327,8 +501,11 @@ const handleTouchMove = (event: TouchEvent) => {
   if (newPos) {
     const image = props.panorama.placedImages.find(img => img.imageId === selectedImageId.value)
     if (image) {
-      const snapped = snapPosition(newPos.x, newPos.y, image.width, image.height, props.panorama, image.imageId)
-      image.x = snapped.x; image.y = snapped.y
+      const vr = getVisibleRect({ ...image, x: newPos.x, y: newPos.y })
+      const snapped = snapPosition(vr.x, vr.y, vr.w, vr.h, props.panorama, image.imageId)
+      const crop = image.crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
+      image.x = snapped.x - crop.left * image.width
+      image.y = snapped.y - crop.top  * image.height
       activeSnapLines.value = snapped.snapLines
       render()
     }
@@ -358,8 +535,9 @@ const handleKeyDown = (event: KeyboardEvent) => {
     event.preventDefault()
     handleDelete()
   } else if (event.key === 'Escape') {
-    clearSelection()
-    render()
+    if (isCropMode.value) { exitCropMode() }
+    else { clearSelection(); render() }
+    showContextMenu.value = false
   }
 }
 
@@ -367,6 +545,8 @@ const handleKeyDown = (event: KeyboardEvent) => {
 const handleDocumentPointerDown = () => {
   if (selectedImageId.value) {
     clearSelection()
+    cropModeImageId.value = null
+    showContextMenu.value = false
     render()
   }
 }
@@ -553,6 +733,109 @@ watch(touchDropPending, (drop) => {
   background: rgba(197, 48, 48, 0.95);
   transform: translate(-50%, -50%) scale(1.1);
 }
+
+/* ── Context menu button ────────────────────────────────────────────────── */
+.context-btn {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2rem;
+  height: 2rem;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  transition: background 0.15s;
+  backdrop-filter: blur(2px);
+  z-index: 6;
+}
+.context-btn:hover { background: rgba(0, 0, 0, 0.75); }
+
+.context-popover {
+  position: absolute;
+  top: calc(8px + 2rem + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  overflow: hidden;
+  pointer-events: all;
+  z-index: 20;
+  min-width: 110px;
+}
+.context-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #2d3748;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+.context-item:hover { background: #f7fafc; }
+
+/* ── Crop overlay ────────────────────────────────────────────────────────── */
+.crop-overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.crop-mask {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.crop-mask-top    { top: 0;    left: 0; right: 0; }
+.crop-mask-bottom { bottom: 0; left: 0; right: 0; }
+.crop-mask-left   { left: 0; }
+.crop-mask-right  { right: 0; }
+
+.crop-bar {
+  position: absolute;
+  pointer-events: all;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid #4299e1;
+  box-sizing: border-box;
+  border-radius: 4px;
+  z-index: 7;
+  touch-action: none;
+}
+.crop-bar:hover { background: white; }
+
+.crop-done-btn {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #4299e1;
+  color: white;
+  border: none;
+  border-radius: 1rem;
+  padding: 0.3rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: all;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.crop-done-btn:hover { background: #3182ce; }
 
 /* Snap guide lines */
 .snap-line {

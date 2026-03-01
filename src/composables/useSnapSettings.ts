@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { Panorama } from '@/types'
+import { getVisibleRect } from '@/types'
 
 const SNAP_THRESHOLD = 15
 
@@ -44,13 +45,19 @@ function borderTargetsY(panorama: Panorama): number[] {
 function imageTargetsX(panorama: Panorama, excludeId: string): number[] {
   return panorama.placedImages
     .filter(img => img.imageId !== excludeId)
-    .flatMap(img => [img.x, img.x + img.width, img.x + img.width / 2])
+    .flatMap(img => {
+      const vr = getVisibleRect(img)
+      return [vr.x, vr.x + vr.w, vr.x + vr.w / 2]
+    })
 }
 
 function imageTargetsY(panorama: Panorama, excludeId: string): number[] {
   return panorama.placedImages
     .filter(img => img.imageId !== excludeId)
-    .flatMap(img => [img.y, img.y + img.height, img.y + img.height / 2])
+    .flatMap(img => {
+      const vr = getVisibleRect(img)
+      return [vr.y, vr.y + vr.h, vr.y + vr.h / 2]
+    })
 }
 
 /** Snap a placed image position (x, y) given its size (w, h). */
@@ -83,18 +90,20 @@ interface ResizeResult { x: number; y: number; width: number; height: number }
 const MIN_SIZE = 50 // canvas pixels — mirrors useImageInteraction
 
 /**
- * Snap a resize result by checking the image's actual moving edges against
- * snap targets (not the cursor). Returns a corrected result with AR preserved.
+ * Snap a resize result by checking the image's actual VISIBLE moving edges
+ * against snap targets. Returns a corrected full-box result with AR preserved.
  *
- * @param result   - tentative result from updateResize (raw, unsnapped)
- * @param fixedX/Y - the corner that does NOT move during this resize
- * @param origW/H  - image dimensions at the moment the resize started
- * @param corner   - which corner is being dragged
+ * @param result        - tentative full-box result from updateResize
+ * @param visFixedX/Y   - fixed corner of the VISIBLE rect at resize start
+ * @param origVisW/H    - visible dimensions at resize start
+ * @param origCropLeft/Top/Right/Bottom - crop fractions at resize start (0 if no crop)
+ * @param corner        - which corner is being dragged
  */
 export function snapResizeResult(
   result: ResizeResult,
-  fixedX: number, fixedY: number,
-  origW: number, origH: number,
+  visFixedX: number, visFixedY: number,
+  origVisW: number, origVisH: number,
+  origCropLeft: number, origCropTop: number, origCropRight: number, origCropBottom: number,
   corner: ResizeCorner,
   panorama: Panorama, excludeId: string
 ): { result: ResizeResult; snapLines: SnapLine[] } {
@@ -107,26 +116,29 @@ export function snapResizeResult(
   if (snapToBorders.value) { tx.push(...borderTargetsX(panorama)); ty.push(...borderTargetsY(panorama)) }
   if (snapToImages.value)  { tx.push(...imageTargetsX(panorama, excludeId)); ty.push(...imageTargetsY(panorama, excludeId)) }
 
-  // Which edges are moving?
+  // Scale factor the resize algorithm applied to the full box
+  // (origVisW corresponds to origFullW * (1 - cropLeft - cropRight), same scale)
+  const unsnappedScale = result.width / (origVisW / (1 - origCropLeft - origCropRight))
+
+  // Visible moving edge positions from the current (unsnapped) result
   const rightMoves  = corner === 'br' || corner === 'tr'
   const bottomMoves = corner === 'br' || corner === 'bl'
 
-  // Unsnapped positions of the moving edges (from raw updateResize result)
-  const movingX = rightMoves  ? result.x + result.width  : result.x
-  const movingY = bottomMoves ? result.y + result.height : result.y
+  const newVisW = result.width  * (1 - origCropLeft - origCropRight)
+  const newVisH = result.height * (1 - origCropTop  - origCropBottom)
 
-  const unsnappedScale = result.width / origW
-  const minScale = MIN_SIZE / Math.min(origW, origH)
+  const movingX = rightMoves  ? visFixedX + newVisW : visFixedX
+  const movingY = bottomMoves ? visFixedY + newVisH : visFixedY
+
+  const origFullW = origVisW / (1 - origCropLeft - origCropRight)
+  const origFullH = origVisH / (1 - origCropTop  - origCropBottom)
+  const minScale = MIN_SIZE / Math.min(origFullW, origFullH)
 
   // ── X axis hysteresis ────────────────────────────────────────────────────
   let xTarget: number | null = null
-
   if (_snapState.x !== null) {
-    if (Math.abs(movingX - _snapState.x) < SNAP_THRESHOLD) {
-      xTarget = _snapState.x          // still inside band → hold lock
-    } else {
-      _snapState.x = null             // escaped → release
-    }
+    if (Math.abs(movingX - _snapState.x) < SNAP_THRESHOLD) { xTarget = _snapState.x }
+    else { _snapState.x = null }
   }
   if (_snapState.x === null) {
     const bx = findBestSnap([movingX], tx)
@@ -135,31 +147,28 @@ export function snapResizeResult(
 
   // ── Y axis hysteresis ────────────────────────────────────────────────────
   let yTarget: number | null = null
-
   if (_snapState.y !== null) {
-    if (Math.abs(movingY - _snapState.y) < SNAP_THRESHOLD) {
-      yTarget = _snapState.y
-    } else {
-      _snapState.y = null
-    }
+    if (Math.abs(movingY - _snapState.y) < SNAP_THRESHOLD) { yTarget = _snapState.y }
+    else { _snapState.y = null }
   }
   if (_snapState.y === null) {
     const by = findBestSnap([movingY], ty)
     if (by) { yTarget = by.at; _snapState.y = by.at }
   }
 
-  // ── Derive scale from snap targets ───────────────────────────────────────
-  // Since AR is locked we can only apply one scale. Compute each candidate
-  // and pick the one closest to the unsnapped scale.
+  // ── Derive scale from visible-edge snap target ────────────────────────────
   let scaleX: number | null = null
   let scaleY: number | null = null
 
   if (xTarget !== null) {
-    scaleX = rightMoves ? (xTarget - fixedX) / origW : (fixedX - xTarget) / origW
-    if (scaleX < minScale) scaleX = null // would shrink too small — ignore
+    // xTarget is the desired visible edge → visible size → full size
+    const targetVisW = rightMoves ? xTarget - visFixedX : visFixedX - xTarget
+    scaleX = (targetVisW / (1 - origCropLeft - origCropRight)) / origFullW
+    if (scaleX < minScale) scaleX = null
   }
   if (yTarget !== null) {
-    scaleY = bottomMoves ? (yTarget - fixedY) / origH : (fixedY - yTarget) / origH
+    const targetVisH = bottomMoves ? yTarget - visFixedY : visFixedY - yTarget
+    scaleY = (targetVisH / (1 - origCropTop - origCropBottom)) / origFullH
     if (scaleY < minScale) scaleY = null
   }
 
@@ -174,17 +183,15 @@ export function snapResizeResult(
 
   if (finalScale === unsnappedScale) return { result, snapLines }
 
-  const newW = origW * finalScale
-  const newH = origH * finalScale
-  return {
-    result: {
-      x:      rightMoves  ? fixedX       : fixedX - newW,
-      y:      bottomMoves ? fixedY       : fixedY - newH,
-      width:  newW,
-      height: newH,
-    },
-    snapLines,
-  }
+  const newW = origFullW * finalScale
+  const newH = origFullH * finalScale
+
+  // Reconstruct full-box position from visible fixed corner
+  // visFixedX = newX + cropLeft * newW  (for right/bottom-moves corner)
+  const newX = rightMoves  ? visFixedX - origCropLeft   * newW : visFixedX + origCropRight  * newW - newW
+  const newY = bottomMoves ? visFixedY - origCropTop    * newH : visFixedY + origCropBottom * newH - newH
+
+  return { result: { x: newX, y: newY, width: newW, height: newH }, snapLines }
 }
 
 // Snap state for resize hysteresis — reset at the start of each resize gesture
