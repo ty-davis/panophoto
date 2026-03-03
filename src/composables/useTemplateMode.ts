@@ -99,7 +99,7 @@ export interface ApplyTemplateOptions {
   replaceFrameIds?: string[]
 }
 
-export function applyTemplate(opts: ApplyTemplateOptions): void {
+export function applyTemplate(opts: ApplyTemplateOptions): { templateGroupId: string } {
   const { panorama, template, insertIndex } = opts
   const replaceIds = opts.replaceFrameIds ?? []
   const templateGroupId = generateId()
@@ -157,6 +157,7 @@ export function applyTemplate(opts: ApplyTemplateOptions): void {
 
   // ── 4. Shift xOffsets and recalculate dimensions ───────────────────────────
   recalculateDimensions(panorama)
+  return { templateGroupId }
 }
 
 // ── Exit template mode ────────────────────────────────────────────────────────

@@ -11,6 +11,15 @@
         </button>
       </div>
 
+      <!-- Active template banner -->
+      <div v-if="activeTemplate" class="active-banner">
+        <i class="fa-solid fa-table-cells"></i>
+        <span>Currently using <strong>{{ activeTemplate.name }}</strong></span>
+        <button class="exit-template-btn" @click="$emit('exit')" title="Exit template mode">
+          <i class="fa-solid fa-xmark"></i> Exit Template
+        </button>
+      </div>
+
       <!-- Filter pills — horizontally scrollable on mobile -->
       <div class="filter-section">
         <div class="filter-row">
@@ -100,9 +109,15 @@ import { TEMPLATES } from '@/data/templates'
 import TemplateMiniPreview from './TemplateMiniPreview.vue'
 
 const props = defineProps<{ frame: Frame; panorama: Panorama }>()
-const emit  = defineEmits<{ apply: [templateId: string, insertFrameIndex: number]; cancel: [] }>()
+const emit  = defineEmits<{ apply: [templateId: string, insertFrameIndex: number]; exit: []; cancel: [] }>()
 
 const selectedTemplateId = ref<string | null>(null)
+
+const activeTemplate = computed(() =>
+  props.frame.templateMode && props.frame.templateId
+    ? (TEMPLATES.find(t => t.id === props.frame.templateId) ?? null)
+    : null
+)
 const activeFrameCount  = ref(0)
 const activeSlotCount   = ref(0)
 const activeAspect      = ref('')
@@ -205,6 +220,39 @@ const handleUse = () => {
   touch-action: manipulation;
 }
 .modal-close:hover { color: #4a5568; }
+
+/* ── Active template banner ── */
+.active-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  background: #ebf8ff;
+  border-bottom: 1px solid #bee3f8;
+  font-size: 0.8rem;
+  color: #2b6cb0;
+  flex-wrap: wrap;
+}
+.active-banner i { flex-shrink: 0; }
+.active-banner strong { font-weight: 700; }
+.exit-template-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid #90cdf4;
+  border-radius: 0.375rem;
+  color: #2b6cb0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.exit-template-btn:hover { background: #bee3f8; }
 
 /* ── Filters: horizontally scrollable strip ── */
 .filter-section {

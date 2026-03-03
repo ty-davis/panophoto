@@ -68,13 +68,6 @@
         <button class="context-item" @click="enterCropMode">
           <i class="fa-solid fa-crop-simple"></i> Crop
         </button>
-        <button
-          v-if="selectedImage?.slotBinding"
-          class="context-item context-item-danger"
-          @click="handleExitTemplateMode"
-        >
-          <i class="fa-solid fa-arrow-right-from-bracket"></i> Exit Template
-        </button>
       </div>
       <!-- Centered delete button -->
       <button class="delete-btn" @click="handleDelete" title="Delete (Del)">
@@ -150,15 +143,17 @@
     :frame="showTemplatePickerForFrame"
     :panorama="panorama"
     @apply="handleTemplateApply"
+    @exit="handleExitTemplateModeForFrame(showTemplatePickerForFrame)"
     @cancel="showTemplatePickerForFrame = null"
   />
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import type { Panorama, Frame } from '@/types'
+import type { Panorama, Frame, PlacedImage } from '@/types'
 import { getVisibleRect } from '@/types'
 import { useCanvas } from '@/composables/useCanvas'
+import { useImageStore } from '@/composables/useImageStore'
 import { useImageInteraction } from '@/composables/useImageInteraction'
 import { snapPosition, snapResizeResult, beginResizeSnap, endResizeSnap } from '@/composables/useSnapSettings'
 import type { SnapLine } from '@/composables/useSnapSettings'
@@ -174,6 +169,7 @@ const props = defineProps<{ panorama: Panorama }>()
 const emit  = defineEmits<{ update: [] }>()
 
 const { renderPanorama, addImageToPanorama, getImageAtPosition } = useCanvas()
+const { getImageElement } = useImageStore()
 const {
   selectedImageId, isDragging,
   selectImage, startDrag, updateDrag, endDrag,
@@ -220,17 +216,68 @@ const openTemplatePicker = (frame: Frame) => {
 const handleTemplateApply = (templateId: string, insertFrameIndex: number) => {
   const template = TEMPLATES.find(t => t.id === templateId)
   if (!template) return
-  applyTemplate({ panorama: props.panorama, template, insertIndex: insertFrameIndex })
+
+  const frame = showTemplatePickerForFrame.value!
+  let migratedImageIds: string[] = []
+  let replaceFrameIds: string[] = []
+
+  // If a template is already active on this frame, harvest its images before replacing
+  if (frame.templateMode && frame.templateGroupId) {
+    const groupId = frame.templateGroupId
+    const slots   = frame.templateSlots ?? []
+
+    // Collect placed image IDs in slot order
+    migratedImageIds = slots
+      .map(slot => props.panorama.placedImages.find(
+        img => img.slotBinding?.templateGroupId === groupId && img.slotBinding?.slotId === slot.slotId
+      )?.imageId)
+      .filter((id): id is string => id !== undefined)
+
+    // Remove those images from placedImages so applyTemplate's x-range cleanup doesn't delete them
+    props.panorama.placedImages = props.panorama.placedImages.filter(
+      img => img.slotBinding?.templateGroupId !== groupId
+    )
+
+    // Frame IDs to replace
+    replaceFrameIds = props.panorama.frames
+      .filter(f => f.templateGroupId === groupId)
+      .map(f => f.id)
+  }
+
+  // Apply new template (replaces old frames if any)
+  const { templateGroupId: newGroupId } = applyTemplate({
+    panorama: props.panorama,
+    template,
+    insertIndex: insertFrameIndex,
+    replaceFrameIds: replaceFrameIds.length ? replaceFrameIds : undefined,
+  })
+
+  // Re-assign harvested images to the new template's slots (up to the slot count)
+  if (migratedImageIds.length) {
+    const newFrame = props.panorama.frames.find(f => f.templateGroupId === newGroupId)
+    const newSlots = newFrame?.templateSlots ?? []
+    for (let i = 0; i < Math.min(migratedImageIds.length, newSlots.length); i++) {
+      const imageId = migratedImageIds[i]!
+      const slot    = newSlots[i]!
+      const imgEl   = getImageElement(imageId)
+      if (!imgEl) continue
+      const fit = coverFitToSlot(imgEl.naturalWidth, imgEl.naturalHeight, slot.slotX, slot.slotY, slot.slotW, slot.slotH)
+      const placed: PlacedImage = { imageId, ...fit, rotation: 0, scale: 1, slotBinding: slot }
+      placed.crop = recomputeSlotCrop(placed)
+      props.panorama.placedImages.push(placed)
+    }
+    // Images beyond new slot count are simply not re-added → they become un-grayed in the tray
+  }
+
   showTemplatePickerForFrame.value = null
   emit('update')
   render()
 }
 
-const handleExitTemplateMode = () => {
-  const img = selectedImage.value
-  if (!img?.slotBinding) return
-  const groupId = img.slotBinding.templateGroupId
-  exitTemplateMode(props.panorama, groupId)
+const handleExitTemplateModeForFrame = (frame: Frame) => {
+  if (!frame.templateGroupId) return
+  exitTemplateMode(props.panorama, frame.templateGroupId)
+  showTemplatePickerForFrame.value = null
   showContextMenu.value = false
   emit('update')
   render()
@@ -596,7 +643,14 @@ const handleMouseMove = (event: MouseEvent) => {
 }
 
 const handleMouseUp = () => {
-  if (isDragging.value) { endDrag(); activeSnapLines.value = []; emit('update') }
+  if (isDragging.value) {
+    const image = props.panorama.placedImages.find(img => img.imageId === selectedImageId.value)
+    if (image) trySnapFreeImageToSlot(image)
+    endDrag()
+    activeSnapLines.value = []
+    emit('update')
+    render()
+  }
 }
 
 // ── Touch handlers (registered manually as non-passive) ───────────────────
@@ -663,7 +717,14 @@ const handleTouchMove = (event: TouchEvent) => {
 }
 
 const handleTouchEnd = () => {
-  if (isDragging.value) { endDrag(); activeSnapLines.value = []; emit('update') }
+  if (isDragging.value) {
+    const image = props.panorama.placedImages.find(img => img.imageId === selectedImageId.value)
+    if (image) trySnapFreeImageToSlot(image)
+    endDrag()
+    activeSnapLines.value = []
+    emit('update')
+    render()
+  }
 }
 
 // Shared helper: after placing an image, snap it to the nearest template slot if applicable
@@ -681,6 +742,40 @@ const snapToTemplateSlot = (imageId: string, x: number, y: number) => {
       Object.assign(placed, fit)
       placed.slotBinding = slot
       placed.crop = recomputeSlotCrop(placed)
+    }
+  }
+}
+
+// When a free (non-slot) placed image is drag-released, snap it into an empty slot
+// if the image centre lands within that slot's bounds.
+const trySnapFreeImageToSlot = (image: PlacedImage) => {
+  if (image.slotBinding) return  // already bound
+
+  const cx = image.x + image.width  / 2
+  const cy = image.y + image.height / 2
+
+  // Build set of occupied slot keys so we never double-fill a slot
+  const occupied = new Set(
+    props.panorama.placedImages
+      .filter(img => img.slotBinding && img.imageId !== image.imageId)
+      .map(img => `${img.slotBinding!.templateGroupId}:${img.slotBinding!.slotId}`)
+  )
+
+  for (const frame of props.panorama.frames) {
+    if (!frame.templateMode || !frame.templateSlots) continue
+    for (const slot of frame.templateSlots) {
+      if (cx < slot.slotX || cx > slot.slotX + slot.slotW) continue
+      if (cy < slot.slotY || cy > slot.slotY + slot.slotH) continue
+      if (occupied.has(`${slot.templateGroupId}:${slot.slotId}`)) continue
+      // Centre is inside this empty slot — snap in
+      const imgEl = getImageElement(image.imageId)
+      const nw = imgEl ? imgEl.naturalWidth  : image.width
+      const nh = imgEl ? imgEl.naturalHeight : image.height
+      const fit = coverFitToSlot(nw, nh, slot.slotX, slot.slotY, slot.slotW, slot.slotH)
+      Object.assign(image, fit)
+      image.slotBinding = slot
+      image.crop = recomputeSlotCrop(image)
+      return
     }
   }
 }
