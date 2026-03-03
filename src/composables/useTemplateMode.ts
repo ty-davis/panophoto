@@ -136,11 +136,17 @@ export function applyTemplate(opts: ApplyTemplateOptions): { templateGroupId: st
     : panorama.totalWidth
 
   const { totalWidth: tmplW, maxHeight: tmplH } = templateDimensions(template)
+
+  // The template frames are vertically centered in the final canvas (same as the CSS `top` offset).
+  // panorama.maxHeight here is the height after removing replaced frames but before inserting new ones.
+  const finalMaxH      = Math.max(panorama.maxHeight, tmplH)
+  const verticalOffset = (finalMaxH - tmplH) / 2
+
   const canvasSlots: TemplateSlotBinding[] = template.generateSlots(tmplW, tmplH, outerPx, innerPx).map(slot => ({
     templateGroupId,
     slotId: slot.id,
     slotX: insertXOffset + slot.x * tmplW,
-    slotY: slot.y * tmplH,
+    slotY: verticalOffset + slot.y * tmplH,
     slotW: slot.w * tmplW,
     slotH: slot.h * tmplH,
   }))

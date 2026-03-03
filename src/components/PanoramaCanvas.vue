@@ -18,6 +18,8 @@
         <select
           :value="frame.aspectRatio.name"
           class="frame-ctrl-select"
+          :disabled="frame.templateMode"
+          :title="frame.templateMode ? 'Aspect ratio is locked while a template is active' : undefined"
           @change="handleFrameRatioChange(frame.id, $event)"
         >
           <option v-for="r in aspectRatios" :key="r.name" :value="r.name">{{ r.label }}</option>
@@ -936,6 +938,7 @@ watch(touchDropPending, (drop) => {
   padding: 0 2px;
 }
 .frame-ctrl-select:focus { outline: none; }
+.frame-ctrl-select:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .frame-ctrl-delete {
   flex-shrink: 0;
