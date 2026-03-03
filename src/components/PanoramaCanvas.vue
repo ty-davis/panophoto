@@ -150,7 +150,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import type { Panorama, Frame, PlacedImage } from '@/types'
+import type { Panorama, Frame, PlacedImage, TemplateSlotBinding } from '@/types'
 import { getVisibleRect } from '@/types'
 import { useCanvas } from '@/composables/useCanvas'
 import { useImageStore } from '@/composables/useImageStore'
@@ -213,12 +213,19 @@ const openTemplatePicker = (frame: Frame) => {
   showTemplatePickerForFrame.value = frame
 }
 
-const handleTemplateApply = (templateId: string, insertFrameIndex: number) => {
+const handleTemplateApply = (templateId: string, insertFrameIndex: number, outerPx: number, innerPx: number) => {
   const template = TEMPLATES.find(t => t.id === templateId)
   if (!template) return
 
   const frame = showTemplatePickerForFrame.value!
-  let migratedImageIds: string[] = []
+
+  interface MigratedImage {
+    imageId: string
+    oldImg: { x: number; y: number; width: number; height: number }
+    oldSlot: TemplateSlotBinding
+  }
+
+  let migratedImages: MigratedImage[] = []
   let replaceFrameIds: string[] = []
 
   // If a template is already active on this frame, harvest its images before replacing
@@ -226,12 +233,17 @@ const handleTemplateApply = (templateId: string, insertFrameIndex: number) => {
     const groupId = frame.templateGroupId
     const slots   = frame.templateSlots ?? []
 
-    // Collect placed image IDs in slot order
-    migratedImageIds = slots
-      .map(slot => props.panorama.placedImages.find(
-        img => img.slotBinding?.templateGroupId === groupId && img.slotBinding?.slotId === slot.slotId
-      )?.imageId)
-      .filter((id): id is string => id !== undefined)
+    // Collect images in slot order, snapshotting their current position
+    migratedImages = slots
+      .map(slot => {
+        const img = props.panorama.placedImages.find(
+          i => i.slotBinding?.templateGroupId === groupId && i.slotBinding?.slotId === slot.slotId
+        )
+        return img
+          ? { imageId: img.imageId, oldImg: { x: img.x, y: img.y, width: img.width, height: img.height }, oldSlot: { ...slot } }
+          : null
+      })
+      .filter((x): x is MigratedImage => x !== null)
 
     // Remove those images from placedImages so applyTemplate's x-range cleanup doesn't delete them
     props.panorama.placedImages = props.panorama.placedImages.filter(
@@ -253,19 +265,36 @@ const handleTemplateApply = (templateId: string, insertFrameIndex: number) => {
     template,
     insertIndex: insertFrameIndex,
     replaceFrameIds: replaceFrameIds.length ? replaceFrameIds : undefined,
+    outerPx,
+    innerPx,
   })
 
-  // Re-assign harvested images to the new template's slots (up to the slot count)
-  if (migratedImageIds.length) {
+  // Re-assign harvested images to the new template's slots, preserving pan/zoom
+  if (migratedImages.length) {
     const newFrame = props.panorama.frames.find(f => f.templateGroupId === newGroupId)
     const newSlots = newFrame?.templateSlots ?? []
-    for (let i = 0; i < Math.min(migratedImageIds.length, newSlots.length); i++) {
-      const imageId = migratedImageIds[i]!
-      const slot    = newSlots[i]!
+    for (let i = 0; i < Math.min(migratedImages.length, newSlots.length); i++) {
+      const { imageId, oldImg, oldSlot } = migratedImages[i]!
+      const newSlot = newSlots[i]!
       const imgEl   = getImageElement(imageId)
       if (!imgEl) continue
-      const fit = coverFitToSlot(imgEl.naturalWidth, imgEl.naturalHeight, slot.slotX, slot.slotY, slot.slotW, slot.slotH)
-      const placed: PlacedImage = { imageId, ...fit, rotation: 0, scale: 1, slotBinding: slot }
+
+      // Scale multiplier: how zoomed-in was the user relative to minimum cover-fit?
+      const oldFit = coverFitToSlot(imgEl.naturalWidth, imgEl.naturalHeight, oldSlot.slotX, oldSlot.slotY, oldSlot.slotW, oldSlot.slotH)
+      const scaleMultiplier = oldImg.width / oldFit.width
+
+      // Pan offset as fraction of old slot dimensions (0 = centered)
+      const panFracX = (oldImg.x + oldImg.width  / 2 - (oldSlot.slotX + oldSlot.slotW / 2)) / oldSlot.slotW
+      const panFracY = (oldImg.y + oldImg.height / 2 - (oldSlot.slotY + oldSlot.slotH / 2)) / oldSlot.slotH
+
+      // Apply scale + pan to new slot
+      const newFit = coverFitToSlot(imgEl.naturalWidth, imgEl.naturalHeight, newSlot.slotX, newSlot.slotY, newSlot.slotW, newSlot.slotH)
+      const newW = newFit.width  * scaleMultiplier
+      const newH = newFit.height * scaleMultiplier
+      const newX = (newSlot.slotX + newSlot.slotW / 2 + panFracX * newSlot.slotW) - newW / 2
+      const newY = (newSlot.slotY + newSlot.slotH / 2 + panFracY * newSlot.slotH) - newH / 2
+
+      const placed: PlacedImage = { imageId, x: newX, y: newY, width: newW, height: newH, rotation: 0, scale: 1, slotBinding: newSlot }
       placed.crop = recomputeSlotCrop(placed)
       props.panorama.placedImages.push(placed)
     }

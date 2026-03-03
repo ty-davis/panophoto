@@ -15,6 +15,7 @@
 
 import { generateId } from '@/utils/imageUtils'
 import type { Template, Frame, PlacedImage, Panorama, TemplateSlotBinding, ImageCrop } from '@/types'
+import { DEFAULT_OUTER_PX, DEFAULT_INNER_PX } from '@/data/templates'
 
 // ── Math helpers ──────────────────────────────────────────────────────────────
 
@@ -97,12 +98,18 @@ export interface ApplyTemplateOptions {
    * Frames will be added or removed to match template.frames.length.
    */
   replaceFrameIds?: string[]
+  /** Outer margin in pixels (default: DEFAULT_OUTER_PX). */
+  outerPx?: number
+  /** Inner gap between slots in pixels (default: DEFAULT_INNER_PX). */
+  innerPx?: number
 }
 
 export function applyTemplate(opts: ApplyTemplateOptions): { templateGroupId: string } {
   const { panorama, template, insertIndex } = opts
   const replaceIds = opts.replaceFrameIds ?? []
   const templateGroupId = generateId()
+  const outerPx = opts.outerPx ?? DEFAULT_OUTER_PX
+  const innerPx = opts.innerPx ?? DEFAULT_INNER_PX
 
   // ── 1. Remove replaced frames and their images ─────────────────────────────
   const removedFrames: Frame[] = []
@@ -129,7 +136,7 @@ export function applyTemplate(opts: ApplyTemplateOptions): { templateGroupId: st
     : panorama.totalWidth
 
   const { totalWidth: tmplW, maxHeight: tmplH } = templateDimensions(template)
-  const canvasSlots: TemplateSlotBinding[] = template.slots.map(slot => ({
+  const canvasSlots: TemplateSlotBinding[] = template.generateSlots(tmplW, tmplH, outerPx, innerPx).map(slot => ({
     templateGroupId,
     slotId: slot.id,
     slotX: insertXOffset + slot.x * tmplW,
@@ -149,6 +156,8 @@ export function applyTemplate(opts: ApplyTemplateOptions): { templateGroupId: st
       templateGroupId,
       templateId: template.id,
       templateSlots: canvasSlots,
+      templateOuterPx: outerPx,
+      templateInnerPx: innerPx,
     }
     currentX += tf.aspectRatio.width
     return frame

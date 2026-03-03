@@ -6,12 +6,16 @@
 import { ref, onMounted, watchEffect } from 'vue'
 import type { Template } from '@/types'
 import { templateDimensions } from '@/composables/useTemplateMode'
+import { DEFAULT_OUTER_PX, DEFAULT_INNER_PX } from '@/data/templates'
 
-const props = defineProps<{ template: Template }>()
+const props = defineProps<{
+  template: Template
+  outerPx?: number
+  innerPx?: number
+}>()
 const canvasEl = ref<HTMLCanvasElement>()
 
 const CANVAS_W = 240
-const G_PX     = 2   // pixel gutter
 
 function draw() {
   const canvas = canvasEl.value
@@ -43,12 +47,15 @@ function draw() {
     cx += fw
   }
 
-  // Slot rects
-  for (const slot of props.template.slots) {
-    const x = offsetX + slot.x * totalWidth  * scale + G_PX
-    const y = slot.y * maxHeight   * scale + G_PX
-    const w = slot.w * totalWidth  * scale - G_PX * 2
-    const h = slot.h * maxHeight   * scale - G_PX * 2
+  // Slot rects using generateSlots with gap values
+  const outerPx = props.outerPx ?? DEFAULT_OUTER_PX
+  const innerPx = props.innerPx ?? DEFAULT_INNER_PX
+  const slots = props.template.generateSlots(totalWidth, maxHeight, outerPx, innerPx)
+  for (const slot of slots) {
+    const x = offsetX + slot.x * totalWidth  * scale
+    const y =           slot.y * maxHeight   * scale
+    const w =           slot.w * totalWidth  * scale
+    const h =           slot.h * maxHeight   * scale
     ctx.fillStyle = '#bee3f8'
     ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h))
     ctx.strokeStyle = '#3182ce'

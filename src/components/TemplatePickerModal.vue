@@ -58,6 +58,22 @@
         </div>
       </div>
 
+      <!-- Gap size controls -->
+      <div class="gap-section">
+        <div class="gap-row">
+          <span class="filter-label">Outer Margin</span>
+          <input type="range" min="0" max="60" step="1" v-model.number="outerPx" class="gap-slider" />
+          <input type="number" min="0" max="60" step="1" v-model.number="outerPx" class="gap-input" />
+          <span class="gap-unit">px</span>
+        </div>
+        <div class="gap-row">
+          <span class="filter-label">Inner Gap</span>
+          <input type="range" min="0" max="60" step="1" v-model.number="innerPx" class="gap-slider" />
+          <input type="number" min="0" max="60" step="1" v-model.number="innerPx" class="gap-input" />
+          <span class="gap-unit">px</span>
+        </div>
+      </div>
+
       <!-- Template list (scrollable) -->
       <div class="template-scroll">
         <!-- Desktop: grid; mobile: list rows -->
@@ -70,7 +86,7 @@
             @click="selectedTemplateId = tmpl.id"
           >
             <div class="preview-wrap">
-              <TemplateMiniPreview :template="tmpl" />
+              <TemplateMiniPreview :template="tmpl" :outer-px="outerPx" :inner-px="innerPx" />
             </div>
             <div class="template-card-info">
               <span class="template-name">{{ tmpl.name }}</span>
@@ -96,7 +112,7 @@
           class="btn btn-primary"
           :disabled="!selectedTemplateId"
           @click="handleUse"
-        >Use Template</button>
+        >{{ applyBtnLabel }}</button>
       </div>
     </div>
   </div>
@@ -105,13 +121,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { Frame, Panorama, Template } from '@/types'
-import { TEMPLATES } from '@/data/templates'
+import { TEMPLATES, DEFAULT_OUTER_PX, DEFAULT_INNER_PX } from '@/data/templates'
 import TemplateMiniPreview from './TemplateMiniPreview.vue'
 
 const props = defineProps<{ frame: Frame; panorama: Panorama }>()
-const emit  = defineEmits<{ apply: [templateId: string, insertFrameIndex: number]; exit: []; cancel: [] }>()
+const emit  = defineEmits<{ apply: [templateId: string, insertFrameIndex: number, outerPx: number, innerPx: number]; exit: []; cancel: [] }>()
 
-const selectedTemplateId = ref<string | null>(null)
+const selectedTemplateId = ref<string | null>(props.frame.templateId ?? null)
 
 const activeTemplate = computed(() =>
   props.frame.templateMode && props.frame.templateId
@@ -124,6 +140,9 @@ const activeSlotCount   = ref(0)
 const aspectOptions     = ['', 'Square', 'Portrait', 'Landscape', 'Story']
 const frameAspectLabel  = props.frame.aspectRatio.name.charAt(0).toUpperCase() + props.frame.aspectRatio.name.slice(1)
 const activeAspect      = ref(aspectOptions.includes(frameAspectLabel) ? frameAspectLabel : '')
+
+const outerPx = ref(props.frame.templateOuterPx ?? DEFAULT_OUTER_PX)
+const innerPx = ref(props.frame.templateInnerPx ?? DEFAULT_INNER_PX)
 
 const frameCountOptions = [0, 1, 2, 3]
 const slotCountOptions  = [0, 1, 2, 3, 4]
@@ -160,11 +179,57 @@ const frameBadgeClass = (tmpl: Template) => {
 const handleUse = () => {
   if (!selectedTemplateId.value) return
   const insertIndex = props.panorama.frames.findIndex(f => f.id === props.frame.id)
-  emit('apply', selectedTemplateId.value, insertIndex === -1 ? props.panorama.frames.length : insertIndex)
+  emit('apply', selectedTemplateId.value, insertIndex === -1 ? props.panorama.frames.length : insertIndex, outerPx.value, innerPx.value)
 }
+
+const applyBtnLabel = computed(() =>
+  activeTemplate.value && selectedTemplateId.value === activeTemplate.value.id
+    ? 'Update Template'
+    : activeTemplate.value
+      ? 'Switch Template'
+      : 'Use Template'
+)
 </script>
 
 <style scoped>
+/* ── Gap size controls ── */
+.gap-section {
+  flex-shrink: 0;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gap-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gap-row .filter-label {
+  min-width: 84px;
+}
+.gap-slider {
+  flex: 1;
+  min-width: 0;
+  accent-color: #3182ce;
+  cursor: pointer;
+}
+.gap-input {
+  width: 48px;
+  padding: 3px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  font-size: 0.78rem;
+  text-align: center;
+  color: #2d3748;
+}
+.gap-input:focus { outline: none; border-color: #3182ce; }
+.gap-unit {
+  font-size: 0.72rem;
+  color: #a0aec0;
+}
+
 /* ── Backdrop ── */
 .modal-backdrop {
   position: fixed;
