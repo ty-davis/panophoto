@@ -242,6 +242,9 @@ const handleTemplateApply = (templateId: string, insertFrameIndex: number) => {
     replaceFrameIds = props.panorama.frames
       .filter(f => f.templateGroupId === groupId)
       .map(f => f.id)
+  } else {
+    // No template yet — replace just this frame with the template's frame(s)
+    replaceFrameIds = [frame.id]
   }
 
   // Apply new template (replaces old frames if any)
