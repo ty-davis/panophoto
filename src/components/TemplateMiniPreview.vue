@@ -22,6 +22,7 @@ function draw() {
   const scaleY = (CANVAS_W / 2) / maxHeight
   const scale  = Math.min(scaleX, scaleY)
   const canvasH = Math.round(maxHeight * scale)
+  const offsetX = Math.round((CANVAS_W - totalWidth * scale) / 2)
 
   canvas.width  = CANVAS_W
   canvas.height = canvasH
@@ -38,13 +39,13 @@ function draw() {
     const fy = (canvasH - fh) / 2
     ctx.strokeStyle = '#cbd5e0'
     ctx.lineWidth   = 1
-    ctx.strokeRect(Math.round(cx) + 0.5, Math.round(fy) + 0.5, Math.round(fw) - 1, Math.round(fh) - 1)
+    ctx.strokeRect(Math.round(offsetX + cx) + 0.5, Math.round(fy) + 0.5, Math.round(fw) - 1, Math.round(fh) - 1)
     cx += fw
   }
 
   // Slot rects
   for (const slot of props.template.slots) {
-    const x = slot.x * totalWidth  * scale + G_PX
+    const x = offsetX + slot.x * totalWidth  * scale + G_PX
     const y = slot.y * maxHeight   * scale + G_PX
     const w = slot.w * totalWidth  * scale - G_PX * 2
     const h = slot.h * maxHeight   * scale - G_PX * 2
