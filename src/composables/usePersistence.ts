@@ -53,26 +53,40 @@ const saveCurrentProject = async () => {
   const { panorama } = usePanorama()
   const { images }   = useImageStore()
 
-  // Save panorama config (pure JSON)
-  await localforage.setItem(panoramaKey(id), JSON.parse(JSON.stringify(panorama.value)))
-
-  // Save image blobs
-  const stored: StoredImage[] = await Promise.all(
-    images.value.map(async (img) => {
-      const resp = await fetch(img.url)
-      const blob = await resp.blob()
-      return { id: img.id, filename: img.file.name, type: img.file.type, blob }
-    })
-  )
-  await localforage.setItem(imagesKey(id), stored)
-
-  // Update project metadata
-  const idx = projects.value.findIndex(p => p.id === id)
-  if (idx !== -1) {
-    projects.value[idx]!.updatedAt = Date.now()
-    projects.value[idx]!.name      = activeProjectName.value
+  try {
+    // Save panorama config (pure JSON)
+    await localforage.setItem(panoramaKey(id), JSON.parse(JSON.stringify(panorama.value)))
+    console.log('[persistence] panorama saved for', id)
+  } catch (e) {
+    console.error('[persistence] failed to save panorama', e)
   }
-  await localforage.setItem(PROJECTS_KEY, JSON.parse(JSON.stringify(projects.value)))
+
+  try {
+    // Save image blobs
+    const stored: StoredImage[] = await Promise.all(
+      images.value.map(async (img) => {
+        const resp = await fetch(img.url)
+        const blob = await resp.blob()
+        return { id: img.id, filename: img.file.name, type: img.file.type, blob }
+      })
+    )
+    await localforage.setItem(imagesKey(id), stored)
+    console.log('[persistence] images saved for', id, `(${stored.length} images)`)
+  } catch (e) {
+    console.error('[persistence] failed to save images', e)
+  }
+
+  try {
+    // Update project metadata
+    const idx = projects.value.findIndex(p => p.id === id)
+    if (idx !== -1) {
+      projects.value[idx]!.updatedAt = Date.now()
+      projects.value[idx]!.name      = activeProjectName.value
+    }
+    await localforage.setItem(PROJECTS_KEY, JSON.parse(JSON.stringify(projects.value)))
+  } catch (e) {
+    console.error('[persistence] failed to save project index', e)
+  }
 }
 
 const debouncedSave = debounce(saveCurrentProject, 600)
@@ -84,15 +98,26 @@ const loadProject = async (id: string) => {
   // Clear current in-memory state
   clearImages()
 
-  const storedImages = await localforage.getItem<StoredImage[]>(imagesKey(id))
-  if (storedImages?.length) {
-    await Promise.all(storedImages.map(si => restoreImage(si.id, si.blob, si.filename, si.type)))
+  try {
+    const storedImages = await localforage.getItem<StoredImage[]>(imagesKey(id))
+    console.log('[persistence] loaded images entry:', storedImages ? storedImages.length : 'null')
+    if (storedImages?.length) {
+      await Promise.all(storedImages.map(si => restoreImage(si.id, si.blob, si.filename, si.type)))
+    }
+  } catch (e) {
+    console.error('[persistence] failed to load images', e)
   }
 
-  const storedPanorama = await localforage.getItem<Panorama>(panoramaKey(id))
-  if (storedPanorama) {
-    restorePanorama(storedPanorama)
-  } else {
+  try {
+    const storedPanorama = await localforage.getItem<Panorama>(panoramaKey(id))
+    console.log('[persistence] loaded panorama:', storedPanorama ? 'found' : 'null')
+    if (storedPanorama) {
+      restorePanorama(storedPanorama)
+    } else {
+      resetPanorama()
+    }
+  } catch (e) {
+    console.error('[persistence] failed to load panorama', e)
     resetPanorama()
   }
 }
@@ -104,8 +129,11 @@ export const usePersistence = () => {
   const initPersistence = async () => {
     isLoading.value = true
     try {
+      console.log('[persistence] init — driver:', localforage.driver())
+
       // Load project index
       const storedProjects = await localforage.getItem<Project[]>(PROJECTS_KEY)
+      console.log('[persistence] projects found:', storedProjects?.length ?? 0)
       projects.value = storedProjects ?? []
 
       // Determine active project

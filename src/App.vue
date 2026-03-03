@@ -4,6 +4,7 @@ import ImageLibrary from './components/ImageLibrary.vue'
 import CanvasEditor from './components/CanvasEditor.vue'
 import ExportPanel from './components/ExportPanel.vue'
 import ProjectModal from './components/ProjectModal.vue'
+import DebugOverlay from './components/DebugOverlay.vue'
 import { usePersistence } from './composables/usePersistence'
 
 type Tab = 'canvas' | 'export'
@@ -31,6 +32,8 @@ const commitName = (e: Event) => {
   renameActiveProject(val || 'Untitled Project')
   editingName.value = false
 }
+
+const isDev = import.meta.env.VITE_DEBUG === 'true'
 
 onMounted(() => initPersistence())
 </script>
@@ -114,6 +117,7 @@ onMounted(() => initPersistence())
     </nav>
 
     <ProjectModal v-if="showProjectModal" @close="showProjectModal = false" />
+    <DebugOverlay v-if="isDev" />
   </div>
 </template>
 
