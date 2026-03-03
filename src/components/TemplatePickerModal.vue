@@ -120,11 +120,13 @@ const activeTemplate = computed(() =>
 )
 const activeFrameCount  = ref(0)
 const activeSlotCount   = ref(0)
-const activeAspect      = ref('')
+
+const aspectOptions     = ['', 'Square', 'Portrait', 'Landscape', 'Story']
+const frameAspectLabel  = props.frame.aspectRatio.name.charAt(0).toUpperCase() + props.frame.aspectRatio.name.slice(1)
+const activeAspect      = ref(aspectOptions.includes(frameAspectLabel) ? frameAspectLabel : '')
 
 const frameCountOptions = [0, 1, 2, 3]
 const slotCountOptions  = [0, 1, 2, 3, 4]
-const aspectOptions     = ['', 'Square', 'Portrait', 'Landscape', 'Story']
 
 const toggleFrameCount = (n: number) => { activeFrameCount.value  = activeFrameCount.value  === n ? 0 : n }
 const toggleSlotCount  = (n: number) => { activeSlotCount.value   = activeSlotCount.value   === n ? 0 : n }
