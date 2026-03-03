@@ -32,12 +32,22 @@ export interface TemplateSlot {
   h: number
 }
 
+// ── Custom template types ─────────────────────────────────────────────────────
+
+/** Recursive split tree for grid templates. */
+export type SplitNode =
+  | { kind: 'slot'; id: string }
+  | { kind: 'split'; dir: 'h' | 'v'; ratio: number; a: SplitNode; b: SplitNode }
+
 export interface Template {
   id: string
   name: string
   frames: Array<{ aspectRatio: AspectRatio }>
   slots: TemplateSlot[]
   generateSlots: (totalW: number, maxH: number, outerPx: number, innerPx: number) => TemplateSlot[]
+  isCustom?: boolean
+  templateType?: 'grid' | 'freeform'
+  tree?: SplitNode  // grid templates only
 }
 
 /**

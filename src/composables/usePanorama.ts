@@ -111,6 +111,21 @@ export const usePanorama = () => {
     () => new Set(panorama.value.placedImages.map(p => p.imageId))
   )
 
+  const moveImageInStack = (imageId: string, delta: number) => {
+    const arr = panorama.value.placedImages
+    const idx = arr.findIndex(p => p.imageId === imageId)
+    if (idx === -1) return
+    const newIdx = Math.max(0, Math.min(arr.length - 1, idx + delta))
+    if (newIdx === idx) return
+    const [img] = arr.splice(idx, 1)
+    arr.splice(newIdx, 0, img!)
+  }
+
+  const bringForward  = (imageId: string) => moveImageInStack(imageId,  1)
+  const sendBackward  = (imageId: string) => moveImageInStack(imageId, -1)
+  const bringToFront  = (imageId: string) => moveImageInStack(imageId,  Infinity)
+  const sendToBack    = (imageId: string) => moveImageInStack(imageId, -Infinity)
+
   return {
     panorama: computed(() => panorama.value),
     frames: computed(() => panorama.value.frames),
@@ -123,6 +138,10 @@ export const usePanorama = () => {
     updateBackground,
     getFrameAtPosition,
     resetPanorama,
-    restorePanorama
+    restorePanorama,
+    bringForward,
+    sendBackward,
+    bringToFront,
+    sendToBack,
   }
 }

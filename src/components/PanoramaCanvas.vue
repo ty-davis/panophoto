@@ -70,6 +70,21 @@
         <button class="context-item" @click="enterCropMode">
           <i class="fa-solid fa-crop-simple"></i> Crop
         </button>
+        <template v-if="props.panorama.placedImages.length > 1">
+          <div class="context-divider"></div>
+          <button class="context-item" :disabled="isTopmost" @click="doLayerOp('front')">
+            <i class="fa-solid fa-angles-up"></i> Bring to Front
+          </button>
+          <button class="context-item" :disabled="isTopmost" @click="doLayerOp('forward')">
+            <i class="fa-solid fa-angle-up"></i> Bring Forward
+          </button>
+          <button class="context-item" :disabled="isBottommost" @click="doLayerOp('backward')">
+            <i class="fa-solid fa-angle-down"></i> Send Backward
+          </button>
+          <button class="context-item" :disabled="isBottommost" @click="doLayerOp('back')">
+            <i class="fa-solid fa-angles-down"></i> Send to Back
+          </button>
+        </template>
       </div>
       <!-- Centered delete button -->
       <button class="delete-btn" @click="handleDelete" title="Delete (Del)">
@@ -164,12 +179,15 @@ import { usePanorama } from '@/composables/usePanorama'
 import { ASPECT_RATIOS, getAspectRatioByName } from '@/utils/aspectRatios'
 import { recomputeSlotCrop, coverFitToSlot, findNearestSlot, exitTemplateMode, applyTemplate } from '@/composables/useTemplateMode'
 import { TEMPLATES } from '@/data/templates'
+import { useCustomTemplates } from '@/composables/useCustomTemplates'
 import ConfirmModal from './ConfirmModal.vue'
 import TemplatePickerModal from './TemplatePickerModal.vue'
 
 const props = defineProps<{ panorama: Panorama }>()
 const emit  = defineEmits<{ update: [] }>()
 
+const { customTemplates, loadCustomTemplates } = useCustomTemplates()
+loadCustomTemplates()
 const { renderPanorama, addImageToPanorama, getImageAtPosition } = useCanvas()
 const { getImageElement } = useImageStore()
 const {
@@ -183,7 +201,7 @@ const canvasRef = ref<HTMLCanvasElement>()
 const activeSnapLines = ref<SnapLine[]>([])
 
 // ── Frame management ──────────────────────────────────────────────────────
-const { addFrame, removeFrame, updateFrameAspectRatio } = usePanorama()
+const { addFrame, removeFrame, updateFrameAspectRatio, bringForward, sendBackward, bringToFront, sendToBack } = usePanorama()
 const aspectRatios = ASPECT_RATIOS
 const newFrameRatio = ref('square')
 const pendingDeleteFrameId = ref<string | null>(null)
@@ -216,7 +234,7 @@ const openTemplatePicker = (frame: Frame) => {
 }
 
 const handleTemplateApply = (templateId: string, insertFrameIndex: number, outerPx: number, innerPx: number) => {
-  const template = TEMPLATES.find(t => t.id === templateId)
+  const template = [...customTemplates.value, ...TEMPLATES].find(t => t.id === templateId)
   if (!template) return
 
   const frame = showTemplatePickerForFrame.value!
@@ -395,6 +413,25 @@ const resizeOverlayStyle = computed(() => {
 // ── Crop mode ─────────────────────────────────────────────────────────────
 const cropModeImageId  = ref<string | null>(null)
 const showContextMenu  = ref(false)
+
+// Z-order helpers
+const selectedImageIndex = computed(() =>
+  props.panorama.placedImages.findIndex(p => p.imageId === selectedImageId.value)
+)
+const isTopmost    = computed(() => selectedImageIndex.value === props.panorama.placedImages.length - 1)
+const isBottommost = computed(() => selectedImageIndex.value === 0)
+
+const doLayerOp = (op: 'front' | 'forward' | 'backward' | 'back') => {
+  if (!selectedImageId.value) return
+  const id = selectedImageId.value
+  if      (op === 'front')    bringToFront(id)
+  else if (op === 'forward')  bringForward(id)
+  else if (op === 'backward') sendBackward(id)
+  else                        sendToBack(id)
+  showContextMenu.value = false
+  emit('update')
+  render()
+}
 
 const isCropMode = computed(() => cropModeImageId.value !== null && cropModeImageId.value === selectedImageId.value)
 
@@ -1215,8 +1252,11 @@ watch(touchDropPending, (drop) => {
   transition: background 0.12s;
 }
 .context-item:hover { background: #f7fafc; }
+.context-item:disabled { opacity: 0.35; cursor: not-allowed; }
+.context-item:disabled:hover { background: none; }
 .context-item-danger { color: #e53e3e !important; }
 .context-item-danger:hover { background: #fff5f5 !important; }
+.context-divider { height: 1px; background: #e2e8f0; margin: 4px 0; }
 
 
 .crop-overlay {

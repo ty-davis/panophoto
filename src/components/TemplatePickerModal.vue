@@ -58,8 +58,8 @@
         </div>
       </div>
 
-      <!-- Gap size controls -->
-      <div class="gap-section">
+      <!-- Gap size controls (hidden for freeform) -->
+      <div class="gap-section" v-if="showGapControls">
         <div class="gap-row">
           <span class="filter-label">Outer Margin</span>
           <input type="range" min="0" max="60" step="1" v-model.number="outerPx" class="gap-slider" />
@@ -76,31 +76,75 @@
 
       <!-- Template list (scrollable) -->
       <div class="template-scroll">
-        <!-- Desktop: grid; mobile: list rows -->
-        <div class="template-grid">
-          <div
-            v-for="tmpl in filteredTemplates"
-            :key="tmpl.id"
-            class="template-card"
-            :class="{ selected: selectedTemplateId === tmpl.id }"
-            @click="selectedTemplateId = tmpl.id"
-          >
-            <div class="preview-wrap">
-              <TemplateMiniPreview :template="tmpl" :outer-px="outerPx" :inner-px="innerPx" />
-            </div>
-            <div class="template-card-info">
-              <span class="template-name">{{ tmpl.name }}</span>
-              <span class="template-badge" :class="frameBadgeClass(tmpl)">
-                {{ frameBadgeLabel(tmpl) }}
-              </span>
-            </div>
-            <!-- Checkmark on selected (visible on mobile list) -->
-            <div class="selected-check" v-if="selectedTemplateId === tmpl.id">
-              <i class="fa-solid fa-check"></i>
+        <!-- Custom template toolbar -->
+        <div class="custom-toolbar">
+          <button class="custom-action-btn" @click="showBuilder = true">
+            <i class="fa-solid fa-plus"></i> New Grid Template
+          </button>
+          <button class="custom-action-btn" v-if="canSaveLayout" @click="showSavePrompt = true">
+            <i class="fa-solid fa-floppy-disk"></i> Save Layout
+          </button>
+        </div>
+
+        <!-- Save layout prompt -->
+        <div class="save-prompt" v-if="showSavePrompt">
+          <input v-model="saveLayoutName" class="save-input" placeholder="Template name…" maxlength="40" @keyup.enter="doSaveLayout" autofocus />
+          <button class="custom-action-btn custom-action-primary" @click="doSaveLayout" :disabled="!saveLayoutName.trim()">Save</button>
+          <button class="custom-action-btn" @click="showSavePrompt = false; saveLayoutName = ''">Cancel</button>
+        </div>
+
+        <!-- My Templates section -->
+        <div v-if="hasCustom" class="templates-section">
+          <div class="section-heading">My Templates</div>
+          <div class="template-grid">
+            <div
+              v-for="tmpl in customTemplates"
+              :key="tmpl.id"
+              class="template-card"
+              :class="{ selected: selectedTemplateId === tmpl.id }"
+              @click="selectedTemplateId = tmpl.id"
+            >
+              <div class="preview-wrap">
+                <TemplateMiniPreview :template="tmpl" :outer-px="outerPx" :inner-px="innerPx" />
+              </div>
+              <div class="template-card-info">
+                <span class="template-name">{{ tmpl.name }}</span>
+                <span class="template-badge badge-custom">{{ tmpl.templateType === 'freeform' ? 'Freeform' : 'Grid' }}</span>
+              </div>
+              <button class="custom-delete-btn" @click="handleDeleteCustom(tmpl.id, $event)" title="Delete template">
+                <i class="fa-solid fa-trash"></i>
+              </button>
             </div>
           </div>
-          <div v-if="filteredTemplates.length === 0" class="no-results">
-            No templates match the selected filters.
+        </div>
+
+        <!-- Built-in templates -->
+        <div class="templates-section">
+          <div class="section-heading" v-if="hasCustom">Built-in Templates</div>
+          <div class="template-grid">
+            <div
+              v-for="tmpl in filteredBuiltins"
+              :key="tmpl.id"
+              class="template-card"
+              :class="{ selected: selectedTemplateId === tmpl.id }"
+              @click="selectedTemplateId = tmpl.id"
+            >
+              <div class="preview-wrap">
+                <TemplateMiniPreview :template="tmpl" :outer-px="outerPx" :inner-px="innerPx" />
+              </div>
+              <div class="template-card-info">
+                <span class="template-name">{{ tmpl.name }}</span>
+                <span class="template-badge" :class="frameBadgeClass(tmpl)">
+                  {{ frameBadgeLabel(tmpl) }}
+                </span>
+              </div>
+              <div class="selected-check" v-if="selectedTemplateId === tmpl.id">
+                <i class="fa-solid fa-check"></i>
+              </div>
+            </div>
+            <div v-if="filteredBuiltins.length === 0" class="no-results">
+              No built-in templates match the selected filters.
+            </div>
           </div>
         </div>
       </div>
@@ -116,22 +160,44 @@
       </div>
     </div>
   </div>
+
+  <TemplateBuilderModal
+    v-if="showBuilder"
+    @cancel="showBuilder = false"
+    @saved="handleBuilderSaved"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { Frame, Panorama, Template } from '@/types'
 import { TEMPLATES, DEFAULT_OUTER_PX, DEFAULT_INNER_PX } from '@/data/templates'
+import { useCustomTemplates } from '@/composables/useCustomTemplates'
 import TemplateMiniPreview from './TemplateMiniPreview.vue'
+import TemplateBuilderModal from './TemplateBuilderModal.vue'
 
 const props = defineProps<{ frame: Frame; panorama: Panorama }>()
-const emit  = defineEmits<{ apply: [templateId: string, insertFrameIndex: number, outerPx: number, innerPx: number]; exit: []; cancel: [] }>()
+const emit  = defineEmits<{
+  apply: [templateId: string, insertFrameIndex: number, outerPx: number, innerPx: number]
+  exit: []
+  cancel: []
+  saveLayout: [name: string]
+}>()
+
+const { customTemplates, loadCustomTemplates, deleteCustomTemplate, createFreeformTemplate, saveCustomTemplate } = useCustomTemplates()
+onMounted(loadCustomTemplates)
+
+const showBuilder     = ref(false)
+const showSavePrompt  = ref(false)
+const saveLayoutName  = ref('')
 
 const selectedTemplateId = ref<string | null>(props.frame.templateId ?? null)
 
+const allTemplates = computed<Template[]>(() => [...customTemplates.value, ...TEMPLATES])
+
 const activeTemplate = computed(() =>
   props.frame.templateMode && props.frame.templateId
-    ? (TEMPLATES.find(t => t.id === props.frame.templateId) ?? null)
+    ? (allTemplates.value.find(t => t.id === props.frame.templateId) ?? null)
     : null
 )
 const activeFrameCount  = ref(0)
@@ -147,11 +213,19 @@ const innerPx = ref(props.frame.templateInnerPx ?? DEFAULT_INNER_PX)
 const frameCountOptions = [0, 1, 2, 3]
 const slotCountOptions  = [0, 1, 2, 3, 4]
 
-const toggleFrameCount = (n: number) => { activeFrameCount.value  = activeFrameCount.value  === n ? 0 : n }
-const toggleSlotCount  = (n: number) => { activeSlotCount.value   = activeSlotCount.value   === n ? 0 : n }
-const toggleAspect     = (ar: string) => { activeAspect.value     = activeAspect.value       === ar ? '' : ar }
+const toggleFrameCount = (n: number) => { activeFrameCount.value = activeFrameCount.value === n ? 0 : n }
+const toggleSlotCount  = (n: number) => { activeSlotCount.value  = activeSlotCount.value  === n ? 0 : n }
+const toggleAspect     = (ar: string) => { activeAspect.value    = activeAspect.value      === ar ? '' : ar }
 
-const filteredTemplates = computed<Template[]>(() => {
+const selectedTemplate = computed(() =>
+  selectedTemplateId.value ? allTemplates.value.find(t => t.id === selectedTemplateId.value) ?? null : null
+)
+const selectedIsFreeform = computed(() => selectedTemplate.value?.templateType === 'freeform')
+
+// Hide gap controls for freeform templates
+const showGapControls = computed(() => !selectedIsFreeform.value)
+
+const filteredBuiltins = computed<Template[]>(() => {
   return TEMPLATES.filter(t => {
     if (activeFrameCount.value && t.frames.length !== activeFrameCount.value) return false
     if (activeSlotCount.value  && t.slots.length  !== activeSlotCount.value)  return false
@@ -160,6 +234,20 @@ const filteredTemplates = computed<Template[]>(() => {
       if (!t.frames.some(f => f.aspectRatio.name === label)) return false
     }
     return true
+  })
+})
+
+// Custom templates shown unfiltered in their own section
+const hasCustom = computed(() => customTemplates.value.length > 0)
+
+// Can save layout? Need ≥1 placed image in this frame's x-range, not in template mode
+const canSaveLayout = computed(() => {
+  if (props.frame.templateMode) return false
+  const minX = props.frame.xOffset
+  const maxX = props.frame.xOffset + props.frame.aspectRatio.width
+  return props.panorama.placedImages.some(img => {
+    const cx = img.x + img.width / 2
+    return cx >= minX && cx < maxX
   })
 })
 
@@ -189,6 +277,45 @@ const applyBtnLabel = computed(() =>
       ? 'Switch Template'
       : 'Use Template'
 )
+
+const handleDeleteCustom = async (id: string, e: MouseEvent) => {
+  e.stopPropagation()
+  await deleteCustomTemplate(id)
+  if (selectedTemplateId.value === id) selectedTemplateId.value = null
+}
+
+const handleBuilderSaved = () => {
+  showBuilder.value = false
+  loadCustomTemplates()
+}
+
+const doSaveLayout = async () => {
+  const name = saveLayoutName.value.trim()
+  if (!name) return
+  // Collect placed images in this frame
+  const minX = props.frame.xOffset
+  const maxX = props.frame.xOffset + props.frame.aspectRatio.width
+  const fw   = props.frame.aspectRatio.width
+  const fh   = props.frame.aspectRatio.height
+  const vertOff = (props.panorama.maxHeight - fh) / 2
+  const placed  = props.panorama.placedImages.filter(img => {
+    const cx = img.x + img.width / 2
+    return cx >= minX && cx < maxX
+  })
+  // Normalize to fractions of frame canvas, sorted by array index (z-order)
+  const slots = placed.map((img, i) => ({
+    id: `s${i + 1}`,
+    x: (img.x - minX) / fw,
+    y: (img.y - vertOff) / fh,
+    w: img.width  / fw,
+    h: img.height / fh,
+  }))
+  const tmpl = createFreeformTemplate(name, [{ aspectRatio: props.frame.aspectRatio }], slots)
+  await saveCustomTemplate(tmpl)
+  showSavePrompt.value = false
+  saveLayoutName.value = ''
+  await loadCustomTemplates()
+}
 </script>
 
 <style scoped>
@@ -533,5 +660,50 @@ const applyBtnLabel = computed(() =>
   .filter-row { min-width: unset; flex-wrap: wrap; white-space: normal; padding: 12px 20px; }
   .filter-group { flex-wrap: wrap; }
 }
+
+/* ── Custom template UI ── */
+.custom-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px 6px;
+  flex-wrap: wrap;
+}
+.custom-action-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px; font-size: 0.75rem; font-weight: 600;
+  border: 1px solid #e2e8f0; border-radius: 0.5rem;
+  background: white; color: #4a5568; cursor: pointer;
+  touch-action: manipulation;
+}
+.custom-action-btn:hover { border-color: #90cdf4; background: #ebf8ff; color: #2b6cb0; }
+.custom-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.custom-action-primary { background: #3182ce; color: white; border-color: #3182ce; }
+.custom-action-primary:hover { background: #2c5282 !important; color: white !important; }
+
+.save-prompt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 16px 10px; flex-wrap: wrap;
+}
+.save-input {
+  flex: 1; min-width: 140px; padding: 6px 10px;
+  border: 1px solid #e2e8f0; border-radius: 0.5rem;
+  font-size: 0.85rem; color: #2d3748;
+}
+.save-input:focus { outline: none; border-color: #3182ce; }
+
+.templates-section { padding-bottom: 4px; }
+.section-heading {
+  font-size: 0.68rem; font-weight: 700; color: #a0aec0;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 8px 16px 4px;
+}
+
+.custom-delete-btn {
+  flex-shrink: 0; background: none; border: none; cursor: pointer;
+  color: #a0aec0; font-size: 0.75rem; padding: 4px 8px;
+  touch-action: manipulation; border-radius: 0.375rem;
+}
+.custom-delete-btn:hover { color: #e53e3e; background: #fff5f5; }
+.badge-custom { background: #faf089; color: #744210; }
 </style>
 
