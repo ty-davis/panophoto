@@ -723,6 +723,7 @@ const handleDocumentPointerDown = () => {
 
 onMounted(() => {
   isTouchDevice.value = window.matchMedia('(hover: none)').matches
+  if (isTouchDevice.value) userZoom.value = 0.85
   render()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('resize',  handleResize)

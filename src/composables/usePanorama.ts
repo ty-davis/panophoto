@@ -107,11 +107,16 @@ export const usePanorama = () => {
     addFrame()
   }
 
+  const placedImageIds = computed(
+    () => new Set(panorama.value.placedImages.map(p => p.imageId))
+  )
+
   return {
     panorama: computed(() => panorama.value),
     frames: computed(() => panorama.value.frames),
     totalWidth: computed(() => panorama.value.totalWidth),
     maxHeight: computed(() => panorama.value.maxHeight),
+    placedImageIds,
     addFrame,
     removeFrame,
     updateFrameAspectRatio,

@@ -11,14 +11,15 @@
         v-for="image in images"
         :key="image.id"
         class="image-item"
-        draggable="true"
-        @dragstart="handleDragStart($event, image.id)"
+        :class="{ placed: placedImageIds.has(image.id) }"
+        :draggable="!placedImageIds.has(image.id)"
+        @dragstart="!placedImageIds.has(image.id) && handleDragStart($event, image.id)"
       >
         <img :src="image.thumbnail || image.url" :alt="image.file.name" />
         <button class="delete-btn" @click.stop="handleRemove(image.id)" title="Remove image">
           ×
         </button>
-        <button class="add-btn" @click.stop="handleAdd(image.id)" title="Add to canvas">
+        <button class="add-btn" @click.stop="!placedImageIds.has(image.id) && handleAdd(image.id)" title="Add to canvas" :disabled="placedImageIds.has(image.id)">
           +
         </button>
         <div class="image-info">
@@ -40,7 +41,7 @@ import { useCanvas } from '@/composables/useCanvas'
 import ImageUploader from '@/components/ImageUploader.vue'
 
 const { images, removeImage } = useImageStore()
-const { panorama } = usePanorama()
+const { panorama, placedImageIds } = usePanorama()
 const { addImageToPanorama } = useCanvas()
 
 const handleDragStart = (event: DragEvent, imageId: string) => {
@@ -117,8 +118,17 @@ const handleAdd = (imageId: string) => {
   transition: all 0.2s;
 }
 
+.image-item.placed {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.image-item.placed .delete-btn {
+  pointer-events: auto;
+}
+
 .image-item:hover {
-  border-color: #4299e1;
   transform: scale(1.05);
 }
 

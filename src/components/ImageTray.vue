@@ -27,8 +27,9 @@
         v-for="image in images"
         :key="image.id"
         class="tray-chip image-chip"
-        @click="handleAdd(image.id)"
-        @touchstart="onChipTouchStart($event, image.id)"
+        :class="{ placed: placedImageIds.has(image.id) }"
+        @click="!placedImageIds.has(image.id) && handleAdd(image.id)"
+        @touchstart="!placedImageIds.has(image.id) && onChipTouchStart($event, image.id)"
       >
         <img :src="image.thumbnail || image.url" :alt="image.file.name" />
         <button class="chip-delete" @click.stop="handleRemove(image.id)" title="Remove">×</button>
@@ -48,7 +49,7 @@ const emit = defineEmits<{ placed: [] }>()
 const collapsed = ref(false)
 
 const { images, addImages, removeImage } = useImageStore()
-const { panorama } = usePanorama()
+const { panorama, placedImageIds } = usePanorama()
 const { addImageToPanorama } = useCanvas()
 
 const handleFileSelect = async (event: Event) => {
@@ -280,6 +281,17 @@ const onChipTouchStart = (event: TouchEvent, imageId: string) => {
   color: #718096;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* Placed (already on canvas) */
+.image-chip.placed {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.image-chip.placed .chip-delete {
+  pointer-events: auto;
 }
 
 /* Image chip */
