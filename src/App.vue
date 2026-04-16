@@ -387,6 +387,10 @@ body {
     padding-bottom: 60px;
   }
 
+  .app-header h1 {
+    display: none;
+  }
+
   .sidebar-left,
   .main-content,
   .sidebar-right {
