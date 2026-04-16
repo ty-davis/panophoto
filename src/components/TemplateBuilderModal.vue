@@ -7,24 +7,6 @@
         <button class="modal-close" @click="$emit('cancel')"><i class="fa-solid fa-xmark"></i></button>
       </div>
 
-      <!-- Frame setup -->
-      <div class="section">
-        <div class="section-row">
-          <span class="section-label">Aspect</span>
-          <div class="pill-group">
-            <button v-for="ar in aspectRatios" :key="ar.name" class="pill"
-              :class="{ active: selectedAR === ar.name }" @click="selectedAR = ar.name">{{ ar.label }}</button>
-          </div>
-        </div>
-        <div class="section-row">
-          <span class="section-label">Frames</span>
-          <div class="pill-group">
-            <button v-for="n in [1,2,3]" :key="n" class="pill"
-              :class="{ active: frameCount === n }" @click="frameCount = n">{{ n }}</button>
-          </div>
-        </div>
-      </div>
-
       <!-- Quick presets -->
       <div class="section">
         <div class="section-row">
@@ -99,9 +81,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { SplitNode } from '@/types'
-import { ASPECT_RATIOS } from '@/utils/aspectRatios'
 import { useCustomTemplates } from '@/composables/useCustomTemplates'
-import { templateDimensions } from '@/composables/useTemplateMode'
+import { TEMPLATE_PREVIEW_SIZE } from '@/data/templates'
 import { generateId } from '@/utils/imageUtils'
 import SplitNodeEditor from './SplitNodeEditor.vue'
 
@@ -109,9 +90,6 @@ const emit = defineEmits<{ cancel: []; saved: [] }>()
 
 const { createGridTemplate, saveCustomTemplate } = useCustomTemplates()
 
-const aspectRatios = ASPECT_RATIOS
-const selectedAR   = ref('square')
-const frameCount   = ref(1)
 const templateName = ref('')
 
 // ── Split tree state ──────────────────────────────────────────────────────────
@@ -212,22 +190,13 @@ const applyPreset = (preset: string) => {
 
 // ── Canvas dimensions ─────────────────────────────────────────────────────────
 
-const ar     = computed(() => ASPECT_RATIOS.find(r => r.name === selectedAR.value)!)
-const frames = computed(() => Array.from({ length: frameCount.value }, () => ({ aspectRatio: ar.value })))
-const tmplDims = computed(() => templateDimensions({ frames: frames.value } as any))
-
 const EDITOR_W = 280
-const editorCanvasStyle = computed(() => {
-  const { totalWidth: tw, maxHeight: mh } = tmplDims.value
-  const h = Math.round((mh / tw) * EDITOR_W)
-  return { width: `${EDITOR_W}px`, height: `${h}px` }
-})
+const editorCanvasStyle = { width: `${EDITOR_W}px`, height: `${EDITOR_W}px` }
 
 // ── Save ─────────────────────────────────────────────────────────────────────
 
 const handleSave = async () => {
-  const { totalWidth: tw, maxHeight: mh } = tmplDims.value
-  const tmpl = createGridTemplate(templateName.value.trim(), frames.value, tree.value, tw, mh)
+  const tmpl = createGridTemplate(templateName.value.trim(), [], tree.value, TEMPLATE_PREVIEW_SIZE, TEMPLATE_PREVIEW_SIZE)
   await saveCustomTemplate(tmpl)
   emit('saved')
 }

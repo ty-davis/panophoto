@@ -1,21 +1,18 @@
 /**
  * Built-in template library.
  *
- * Slot coordinates (x, y, w, h) are fractions of the template's own combined
- * canvas dimensions (totalWidth × maxHeight).
+ * Templates are layout-only: they carry no fixed aspect ratio or frame count.
+ * Slot coords (x, y, w, h) are fractions of (totalW × maxH), which at apply
+ * time come from the current frame's own pixel dimensions.
  *
- * Each template exposes generateSlots(totalW, maxH, outerPx, innerPx) so gaps
- * are always equal in pixels regardless of canvas proportions. The static
- * `slots` field is pre-seeded with DEFAULT_OUTER_PX / DEFAULT_INNER_PX.
+ * The static `slots` field is pre-seeded at TEMPLATE_PREVIEW_SIZE for use by
+ * TemplateMiniPreview and the template builder — those are display-only values.
  */
 
 import type { Template, TemplateSlot } from '@/types'
-import { ASPECT_RATIOS } from '@/utils/aspectRatios'
 
-const sq   = ASPECT_RATIOS.find(r => r.name === 'square')!
-const port = ASPECT_RATIOS.find(r => r.name === 'portrait')!
-const land = ASPECT_RATIOS.find(r => r.name === 'landscape')!
-const stor = ASPECT_RATIOS.find(r => r.name === 'story')!
+/** Canonical size used only for slot pre-seeding / preview rendering. */
+export const TEMPLATE_PREVIEW_SIZE = 600
 
 export const DEFAULT_OUTER_PX = 20
 export const DEFAULT_INNER_PX = 10
@@ -110,85 +107,65 @@ function genBanner2(totalW: number, maxH: number, outerPx: number, innerPx: numb
 
 // ── Single-frame templates ────────────────────────────────────────────────────
 
-const singleFrameTemplates = (ar: typeof sq): Template[] => {
-  const name = ar.label
-  const tw = ar.width, mh = ar.height
-  const O = DEFAULT_OUTER_PX, I = DEFAULT_INNER_PX
-
-  return [
-    { id: `${ar.name}-1-full`,  name: `${name} — Full`,
-      frames: [{ aspectRatio: ar }], generateSlots: genFull,
-      slots: genFull(tw, mh, O, I), printCompatible: true },
-
-    { id: `${ar.name}-2-lr`,    name: `${name} — Left/Right`,
-      frames: [{ aspectRatio: ar }], generateSlots: genLR,
-      slots: genLR(tw, mh, O, I), printCompatible: true },
-
-    { id: `${ar.name}-2-tb`,    name: `${name} — Top/Bottom`,
-      frames: [{ aspectRatio: ar }], generateSlots: genTB,
-      slots: genTB(tw, mh, O, I), printCompatible: true },
-
-    { id: `${ar.name}-2-6040`,  name: `${name} — 60/40`,
-      frames: [{ aspectRatio: ar }], generateSlots: gen6040,
-      slots: gen6040(tw, mh, O, I), printCompatible: true },
-
-    { id: `${ar.name}-3-cols`,  name: `${name} — 3 Columns`,
-      frames: [{ aspectRatio: ar }], generateSlots: gen3Cols,
-      slots: gen3Cols(tw, mh, O, I), printCompatible: true },
-
-    { id: `${ar.name}-3-l2r`,   name: `${name} — Large Left + 2 Right`,
-      frames: [{ aspectRatio: ar }], generateSlots: genL2R,
-      slots: genL2R(tw, mh, O, I), printCompatible: true },
-
-    { id: `${ar.name}-4-grid`,  name: `${name} — 2×2 Grid`,
-      frames: [{ aspectRatio: ar }], generateSlots: gen2x2,
-      slots: gen2x2(tw, mh, O, I), printCompatible: true },
-  ]
-}
-
-// ── Multi-frame templates ─────────────────────────────────────────────────────
-
-const multiFrameTemplates: Template[] = [
-  { id: 'sq-sq-panorama', name: '2×Square — Full Panorama',
-    frames: [{ aspectRatio: sq }, { aspectRatio: sq }],
-    generateSlots: genFull,
-    slots: genFull(sq.width*2, sq.height, DEFAULT_OUTER_PX, DEFAULT_INNER_PX) },
-
-  { id: 'sq-sq-banner-2', name: '2×Square — Banner + 2 Below',
-    frames: [{ aspectRatio: sq }, { aspectRatio: sq }],
-    generateSlots: genBanner2,
-    slots: genBanner2(sq.width*2, sq.height, DEFAULT_OUTER_PX, DEFAULT_INNER_PX) },
-
-  { id: 'pt-pt-panorama', name: '2×Portrait — Full Panorama',
-    frames: [{ aspectRatio: port }, { aspectRatio: port }],
-    generateSlots: genFull,
-    slots: genFull(port.width*2, port.height, DEFAULT_OUTER_PX, DEFAULT_INNER_PX) },
-
-  { id: 'sq-sq-sq-panorama', name: '3×Square — Full Panorama',
-    frames: [{ aspectRatio: sq }, { aspectRatio: sq }, { aspectRatio: sq }],
-    generateSlots: genFull,
-    slots: genFull(sq.width*3, sq.height, DEFAULT_OUTER_PX, DEFAULT_INNER_PX) },
-
-  { id: 'sq-sq-sq-wide-flanks', name: '3×Square — Wide Center + Flanks',
-    frames: [{ aspectRatio: sq }, { aspectRatio: sq }, { aspectRatio: sq }],
-    generateSlots: gen3Cols,
-    slots: gen3Cols(sq.width*3, sq.height, DEFAULT_OUTER_PX, DEFAULT_INNER_PX) },
-
-  { id: 'land-land-panorama', name: '2×Landscape — Full Panorama',
-    frames: [{ aspectRatio: land }, { aspectRatio: land }],
-    generateSlots: genFull,
-    slots: genFull(land.width*2, land.height, DEFAULT_OUTER_PX, DEFAULT_INNER_PX) },
-
-  { id: 'land-sq-split', name: 'Landscape + Square',
-    frames: [{ aspectRatio: land }, { aspectRatio: sq }],
-    generateSlots: genLR,
-    slots: genLR(land.width+sq.width, Math.max(land.height, sq.height), DEFAULT_OUTER_PX, DEFAULT_INNER_PX) },
-]
+const P = TEMPLATE_PREVIEW_SIZE
+const O = DEFAULT_OUTER_PX
+const I = DEFAULT_INNER_PX
 
 export const TEMPLATES: Template[] = [
-  ...singleFrameTemplates(sq),
-  ...singleFrameTemplates(port),
-  ...singleFrameTemplates(land),
-  ...singleFrameTemplates(stor),
-  ...multiFrameTemplates,
+  {
+    id: 'layout-full',
+    name: 'Full',
+    frames: [],
+    generateSlots: genFull,
+    slots: genFull(P, P, O, I),
+  },
+  {
+    id: 'layout-lr',
+    name: 'Left / Right',
+    frames: [],
+    generateSlots: genLR,
+    slots: genLR(P, P, O, I),
+  },
+  {
+    id: 'layout-tb',
+    name: 'Top / Bottom',
+    frames: [],
+    generateSlots: genTB,
+    slots: genTB(P, P, O, I),
+  },
+  {
+    id: 'layout-6040',
+    name: '60 / 40 Split',
+    frames: [],
+    generateSlots: gen6040,
+    slots: gen6040(P, P, O, I),
+  },
+  {
+    id: 'layout-3cols',
+    name: '3 Columns',
+    frames: [],
+    generateSlots: gen3Cols,
+    slots: gen3Cols(P, P, O, I),
+  },
+  {
+    id: 'layout-l2r',
+    name: 'Large Left + 2 Right',
+    frames: [],
+    generateSlots: genL2R,
+    slots: genL2R(P, P, O, I),
+  },
+  {
+    id: 'layout-2x2',
+    name: '2×2 Grid',
+    frames: [],
+    generateSlots: gen2x2,
+    slots: gen2x2(P, P, O, I),
+  },
+  {
+    id: 'layout-banner2',
+    name: 'Banner + 2 Below',
+    frames: [],
+    generateSlots: genBanner2,
+    slots: genBanner2(P, P, O, I),
+  },
 ]

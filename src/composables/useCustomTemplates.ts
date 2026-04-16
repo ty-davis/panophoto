@@ -145,12 +145,12 @@ export function useCustomTemplates() {
   /** Create a new freeform template from a list of normalized slot fractions. */
   const createFreeformTemplate = (
     name: string,
-    frames: Array<{ aspectRatio: AspectRatio }>,
+    _frames: Array<{ aspectRatio: AspectRatio }>,
     slots: TemplateSlot[],
   ): Template => ({
     id: generateId(),
     name,
-    frames,
+    frames: [],
     slots,
     generateSlots: makeFreeformGenerator(slots),
     isCustom: true,
@@ -160,7 +160,7 @@ export function useCustomTemplates() {
   /** Create a new grid template from a SplitNode tree. */
   const createGridTemplate = (
     name: string,
-    frames: Array<{ aspectRatio: AspectRatio }>,
+    _frames: Array<{ aspectRatio: AspectRatio }>,
     tree: SplitNode,
     totalW: number,
     maxH: number,
@@ -169,7 +169,7 @@ export function useCustomTemplates() {
     return {
       id: generateId(),
       name,
-      frames,
+      frames: [],
       slots: gen(totalW, maxH, DEFAULT_OUTER_PX, DEFAULT_INNER_PX),
       generateSlots: gen,
       isCustom: true,

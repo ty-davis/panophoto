@@ -15,7 +15,7 @@
 
 import { generateId } from '@/utils/imageUtils'
 import type { Template, Frame, PlacedImage, Panorama, TemplateSlotBinding, ImageCrop } from '@/types'
-import { DEFAULT_OUTER_PX, DEFAULT_INNER_PX } from '@/data/templates'
+import { DEFAULT_OUTER_PX, DEFAULT_INNER_PX, TEMPLATE_PREVIEW_SIZE } from '@/data/templates'
 
 // ── Math helpers ──────────────────────────────────────────────────────────────
 
@@ -60,14 +60,18 @@ export function coverFitToSlot(
 
 // ── Template dimensions ───────────────────────────────────────────────────────
 
-export function templateDimensions(template: Template): { totalWidth: number; maxHeight: number } {
+export function templateDimensions(template: { frames: Array<{ aspectRatio?: { width: number; height: number } }> }): { totalWidth: number; maxHeight: number } {
+  if (!template.frames || template.frames.length === 0) {
+    return { totalWidth: TEMPLATE_PREVIEW_SIZE, maxHeight: TEMPLATE_PREVIEW_SIZE }
+  }
   let totalWidth = 0
   let maxHeight  = 0
   for (const f of template.frames) {
+    if (!f.aspectRatio) continue
     totalWidth += f.aspectRatio.width
     if (f.aspectRatio.height > maxHeight) maxHeight = f.aspectRatio.height
   }
-  return { totalWidth, maxHeight }
+  return { totalWidth: totalWidth || TEMPLATE_PREVIEW_SIZE, maxHeight: maxHeight || TEMPLATE_PREVIEW_SIZE }
 }
 
 /** Convert template-relative slot fractions → canvas-space pixel rects. */
@@ -111,7 +115,44 @@ export function applyTemplate(opts: ApplyTemplateOptions): { templateGroupId: st
   const outerPx = opts.outerPx ?? DEFAULT_OUTER_PX
   const innerPx = opts.innerPx ?? DEFAULT_INNER_PX
 
-  // ── 1. Remove replaced frames and their images ─────────────────────────────
+  // ── Layout-only path: no frames specified — apply slots to the current frame ─
+  if (!template.frames || template.frames.length === 0) {
+    const targetFrame = panorama.frames.find(f => replaceIds.includes(f.id))
+      ?? panorama.frames[insertIndex]
+    if (!targetFrame) return { templateGroupId }
+
+    const tmplW = targetFrame.aspectRatio.width
+    const tmplH = targetFrame.aspectRatio.height
+    const { xOffset } = targetFrame
+
+    // Clean up free images in this frame's x-range (template images were already
+    // harvested and removed by PanoramaCanvas before this is called)
+    panorama.placedImages = panorama.placedImages.filter(img =>
+      !(img.x + img.width > xOffset && img.x < xOffset + tmplW)
+    )
+
+    const verticalOffset = (panorama.maxHeight - tmplH) / 2
+    const canvasSlots: TemplateSlotBinding[] = template.generateSlots(tmplW, tmplH, outerPx, innerPx).map(slot => ({
+      templateGroupId,
+      slotId:  slot.id,
+      slotX:   xOffset + slot.x * tmplW,
+      slotY:   verticalOffset + slot.y * tmplH,
+      slotW:   slot.w * tmplW,
+      slotH:   slot.h * tmplH,
+    }))
+
+    targetFrame.templateMode     = true
+    targetFrame.templateGroupId  = templateGroupId
+    targetFrame.templateId       = template.id
+    targetFrame.templateSlots    = canvasSlots
+    targetFrame.templateOuterPx  = outerPx
+    targetFrame.templateInnerPx  = innerPx
+
+    recalculateDimensions(panorama)
+    return { templateGroupId }
+  }
+
+  // ── Multi-frame path (legacy / custom templates with explicit frames) ─────────
   const removedFrames: Frame[] = []
   for (const id of replaceIds) {
     const idx = panorama.frames.findIndex(f => f.id === id)

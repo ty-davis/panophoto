@@ -24,17 +24,6 @@
       <div class="filter-section">
         <div class="filter-row">
           <div class="filter-group">
-            <span class="filter-label">Frames</span>
-            <button
-              v-for="n in frameCountOptions"
-              :key="n"
-              class="pill"
-              :class="{ active: activeFrameCount === n }"
-              @click="toggleFrameCount(n)"
-            >{{ n === 0 ? 'Any' : n }}</button>
-          </div>
-          <div class="filter-sep"></div>
-          <div class="filter-group">
             <span class="filter-label">Slots</span>
             <button
               v-for="n in slotCountOptions"
@@ -43,17 +32,6 @@
               :class="{ active: activeSlotCount === n }"
               @click="toggleSlotCount(n)"
             >{{ n === 0 ? 'Any' : n }}</button>
-          </div>
-          <div class="filter-sep"></div>
-          <div class="filter-group">
-            <span class="filter-label">Aspect</span>
-            <button
-              v-for="ar in aspectOptions"
-              :key="ar"
-              class="pill"
-              :class="{ active: activeAspect === ar }"
-              @click="toggleAspect(ar)"
-            >{{ ar === '' ? 'Any' : ar }}</button>
           </div>
         </div>
       </div>
@@ -134,9 +112,7 @@
               </div>
               <div class="template-card-info">
                 <span class="template-name">{{ tmpl.name }}</span>
-                <span class="template-badge" :class="frameBadgeClass(tmpl)">
-                  {{ frameBadgeLabel(tmpl) }}
-                </span>
+                <span class="template-badge badge-info">{{ tmpl.slots.length }} slot{{ tmpl.slots.length !== 1 ? 's' : '' }}</span>
               </div>
               <div class="selected-check" v-if="selectedTemplateId === tmpl.id">
                 <i class="fa-solid fa-check"></i>
@@ -200,22 +176,14 @@ const activeTemplate = computed(() =>
     ? (allTemplates.value.find(t => t.id === props.frame.templateId) ?? null)
     : null
 )
-const activeFrameCount  = ref(0)
 const activeSlotCount   = ref(0)
-
-const aspectOptions     = ['', 'Square', 'Portrait', 'Landscape', 'Story']
-const frameAspectLabel  = props.frame.aspectRatio.name.charAt(0).toUpperCase() + props.frame.aspectRatio.name.slice(1)
-const activeAspect      = ref(aspectOptions.includes(frameAspectLabel) ? frameAspectLabel : '')
 
 const outerPx = ref(props.frame.templateOuterPx ?? DEFAULT_OUTER_PX)
 const innerPx = ref(props.frame.templateInnerPx ?? DEFAULT_INNER_PX)
 
-const frameCountOptions = [0, 1, 2, 3]
 const slotCountOptions  = [0, 1, 2, 3, 4]
 
-const toggleFrameCount = (n: number) => { activeFrameCount.value = activeFrameCount.value === n ? 0 : n }
 const toggleSlotCount  = (n: number) => { activeSlotCount.value  = activeSlotCount.value  === n ? 0 : n }
-const toggleAspect     = (ar: string) => { activeAspect.value    = activeAspect.value      === ar ? '' : ar }
 
 const selectedTemplate = computed(() =>
   selectedTemplateId.value ? allTemplates.value.find(t => t.id === selectedTemplateId.value) ?? null : null
@@ -227,13 +195,7 @@ const showGapControls = computed(() => !selectedIsFreeform.value)
 
 const filteredBuiltins = computed<Template[]>(() => {
   return TEMPLATES.filter(t => {
-    if (props.printMode && !t.printCompatible) return false  // print mode: single-frame only
-    if (activeFrameCount.value && t.frames.length !== activeFrameCount.value) return false
-    if (activeSlotCount.value  && t.slots.length  !== activeSlotCount.value)  return false
-    if (activeAspect.value) {
-      const label = activeAspect.value.toLowerCase()
-      if (!t.frames.some(f => f.aspectRatio.name === label)) return false
-    }
+    if (activeSlotCount.value && t.slots.length !== activeSlotCount.value) return false
     return true
   })
 })
@@ -251,19 +213,6 @@ const canSaveLayout = computed(() => {
     return cx >= minX && cx < maxX
   })
 })
-
-const frameBadgeLabel = (tmpl: Template) => {
-  const current = props.panorama.frames.length
-  const needed  = tmpl.frames.length
-  if (needed === 1) return '1 frame'
-  if (needed === current) return `${needed} frames — Matches!`
-  return `Needs ${needed} frames`
-}
-
-const frameBadgeClass = (tmpl: Template) => {
-  const current = props.panorama.frames.length
-  return tmpl.frames.length === current ? 'badge-match' : 'badge-info'
-}
 
 const handleUse = () => {
   if (!selectedTemplateId.value) return
@@ -311,7 +260,7 @@ const doSaveLayout = async () => {
     w: img.width  / fw,
     h: img.height / fh,
   }))
-  const tmpl = createFreeformTemplate(name, [{ aspectRatio: props.frame.aspectRatio }], slots)
+  const tmpl = createFreeformTemplate(name, [], slots)
   await saveCustomTemplate(tmpl)
   showSavePrompt.value = false
   saveLayoutName.value = ''

@@ -36,15 +36,22 @@ function draw() {
   ctx.fillRect(0, 0, CANVAS_W, canvasH)
 
   // Frame outlines
-  let cx = 0
-  for (const f of props.template.frames) {
-    const fw = f.aspectRatio.width  * scale
-    const fh = f.aspectRatio.height * scale
-    const fy = (canvasH - fh) / 2
-    ctx.strokeStyle = '#cbd5e0'
-    ctx.lineWidth   = 1
-    ctx.strokeRect(Math.round(offsetX + cx) + 0.5, Math.round(fy) + 0.5, Math.round(fw) - 1, Math.round(fh) - 1)
-    cx += fw
+  if (props.template.frames.length === 0) {
+    // Layout-only template — draw the whole preview rect as the frame
+    ctx.strokeStyle = '#a0aec0'
+    ctx.lineWidth   = 1.5
+    ctx.strokeRect(offsetX + 0.5, 0.5, Math.round(totalWidth * scale) - 1, canvasH - 1)
+  } else {
+    let cx = 0
+    for (const f of props.template.frames) {
+      const fw = f.aspectRatio.width  * scale
+      const fh = f.aspectRatio.height * scale
+      const fy = (canvasH - fh) / 2
+      ctx.strokeStyle = '#cbd5e0'
+      ctx.lineWidth   = 1
+      ctx.strokeRect(Math.round(offsetX + cx) + 0.5, Math.round(fy) + 0.5, Math.round(fw) - 1, Math.round(fh) - 1)
+      cx += fw
+    }
   }
 
   // Slot rects using generateSlots with gap values
