@@ -1,7 +1,8 @@
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import localforage from 'localforage'
 import { useImageStore } from './useImageStore'
 import { usePanorama } from './usePanorama'
+import { usePrintProject } from './usePrintProject'
 import { generateId } from '@/utils/imageUtils'
 import type { Panorama } from '@/types'
 
@@ -10,6 +11,7 @@ import type { Panorama } from '@/types'
 export interface Project {
   id: string
   name: string
+  type: 'social' | 'print'
   createdAt: number
   updatedAt: number
 }
@@ -34,6 +36,7 @@ const PROJECTS_KEY   = 'panophoto:projects'
 const ACTIVE_KEY     = 'panophoto:activeProjectId'
 const panoramaKey    = (id: string) => `panophoto:project:${id}:panorama`
 const imagesKey      = (id: string) => `panophoto:project:${id}:images`
+const printSizeKey   = (id: string) => `panophoto:project:${id}:printSize`
 
 // ── Debounce helper ───────────────────────────────────────────────────────────
 
@@ -50,19 +53,25 @@ function debounce<T extends (...args: any[]) => any>(fn: T, ms: number): T {
 const saveCurrentProject = async () => {
   const id = activeProjectId.value
   if (!id) return
-  const { panorama } = usePanorama()
-  const { images }   = useImageStore()
+  const project = projects.value.find(p => p.id === id)
+  const isPrint = project?.type === 'print'
 
-  try {
-    // Save panorama config (pure JSON)
-    await localforage.setItem(panoramaKey(id), JSON.parse(JSON.stringify(panorama.value)))
-    console.log('[persistence] panorama saved for', id)
-  } catch (e) {
-    console.error('[persistence] failed to save panorama', e)
+  if (isPrint) {
+    const { printPanorama, activePrintSize } = usePrintProject()
+    try {
+      await localforage.setItem(panoramaKey(id), JSON.parse(JSON.stringify(printPanorama.value)))
+      await localforage.setItem(printSizeKey(id), activePrintSize.value.name)
+    } catch (e) { console.error('[persistence] failed to save print panorama', e) }
+  } else {
+    const { panorama } = usePanorama()
+    try {
+      await localforage.setItem(panoramaKey(id), JSON.parse(JSON.stringify(panorama.value)))
+      console.log('[persistence] panorama saved for', id)
+    } catch (e) { console.error('[persistence] failed to save panorama', e) }
   }
 
   try {
-    // Save image blobs
+    const { images } = useImageStore()
     const stored: StoredImage[] = await Promise.all(
       images.value.map(async (img) => {
         const resp = await fetch(img.url)
@@ -72,28 +81,26 @@ const saveCurrentProject = async () => {
     )
     await localforage.setItem(imagesKey(id), stored)
     console.log('[persistence] images saved for', id, `(${stored.length} images)`)
-  } catch (e) {
-    console.error('[persistence] failed to save images', e)
-  }
+  } catch (e) { console.error('[persistence] failed to save images', e) }
 
   try {
-    // Update project metadata
     const idx = projects.value.findIndex(p => p.id === id)
     if (idx !== -1) {
       projects.value[idx]!.updatedAt = Date.now()
       projects.value[idx]!.name      = activeProjectName.value
     }
     await localforage.setItem(PROJECTS_KEY, JSON.parse(JSON.stringify(projects.value)))
-  } catch (e) {
-    console.error('[persistence] failed to save project index', e)
-  }
+  } catch (e) { console.error('[persistence] failed to save project index', e) }
 }
 
 const debouncedSave = debounce(saveCurrentProject, 600)
 
 const loadProject = async (id: string) => {
-  const { restoreImage, clearImages }     = useImageStore()
+  const { restoreImage, clearImages }      = useImageStore()
   const { restorePanorama, resetPanorama } = usePanorama()
+  const { restorePrintPanorama, resetPrintProject, restorePrintSize } = usePrintProject()
+  const project = projects.value.find(p => p.id === id)
+  const isPrint = project?.type === 'print'
 
   // Clear current in-memory state
   clearImages()
@@ -102,23 +109,31 @@ const loadProject = async (id: string) => {
     const storedImages = await localforage.getItem<StoredImage[]>(imagesKey(id))
     console.log('[persistence] loaded images entry:', storedImages ? storedImages.length : 'null')
     if (storedImages?.length) {
-      await Promise.all(storedImages.map(si => restoreImage(si.id, si.blob, si.filename, si.type)))
+      await Promise.all(storedImages.map((si: StoredImage) => restoreImage(si.id, si.blob, si.filename, si.type)))
     }
-  } catch (e) {
-    console.error('[persistence] failed to load images', e)
-  }
+  } catch (e) { console.error('[persistence] failed to load images', e) }
 
-  try {
-    const storedPanorama = await localforage.getItem<Panorama>(panoramaKey(id))
-    console.log('[persistence] loaded panorama:', storedPanorama ? 'found' : 'null')
-    if (storedPanorama) {
-      restorePanorama(storedPanorama)
-    } else {
+  if (isPrint) {
+    try {
+      const sizeName = await localforage.getItem<string>(printSizeKey(id))
+      if (sizeName) restorePrintSize(sizeName)
+      const storedPanorama = await localforage.getItem<Panorama>(panoramaKey(id))
+      if (storedPanorama) restorePrintPanorama(storedPanorama)
+      else resetPrintProject()
+    } catch (e) {
+      console.error('[persistence] failed to load print project', e)
+      resetPrintProject()
+    }
+  } else {
+    try {
+      const storedPanorama = await localforage.getItem<Panorama>(panoramaKey(id))
+      console.log('[persistence] loaded panorama:', storedPanorama ? 'found' : 'null')
+      if (storedPanorama) restorePanorama(storedPanorama)
+      else resetPanorama()
+    } catch (e) {
+      console.error('[persistence] failed to load panorama', e)
       resetPanorama()
     }
-  } catch (e) {
-    console.error('[persistence] failed to load panorama', e)
-    resetPanorama()
   }
 }
 
@@ -134,17 +149,19 @@ export const usePersistence = () => {
       // Load project index
       const storedProjects = await localforage.getItem<Project[]>(PROJECTS_KEY)
       console.log('[persistence] projects found:', storedProjects?.length ?? 0)
-      projects.value = storedProjects ?? []
+      // Backfill type for legacy projects that don't have it
+      projects.value = (storedProjects ?? []).map(p => ({ ...p, type: p.type ?? 'social' }))
 
       // Determine active project
       let activeId = await localforage.getItem<string>(ACTIVE_KEY)
 
       if (!activeId || !projects.value.find(p => p.id === activeId)) {
-        // No valid active project — create a fresh one
+        // No valid active project — create a fresh social one as default
         activeId = generateId()
         const newProject: Project = {
           id: activeId,
           name: 'Untitled Project',
+          type: 'social',
           createdAt: Date.now(),
           updatedAt: Date.now()
         }
@@ -158,11 +175,13 @@ export const usePersistence = () => {
 
       await loadProject(activeId)
 
-      // Set up auto-save watchers after restore
-      const { panorama }  = usePanorama()
-      const { images }    = useImageStore()
-      watch(panorama,   debouncedSave, { deep: true })
-      watch(images,     debouncedSave, { deep: true })
+      // Auto-save: watch both social panorama and print panorama (save fn branches on project type)
+      const { panorama } = usePanorama()
+      const { printPanorama } = usePrintProject()
+      const { images } = useImageStore()
+      watch(panorama,      debouncedSave, { deep: true })
+      watch(printPanorama, debouncedSave, { deep: true })
+      watch(images,        debouncedSave, { deep: true })
       watch(activeProjectName, debouncedSave)
     } finally {
       isLoading.value = false
@@ -176,17 +195,19 @@ export const usePersistence = () => {
     debouncedSave()
   }
 
-  const createNewProject = async () => {
+  const createNewProject = async (type: 'social' | 'print' = 'social') => {
     // Save current before switching
     await saveCurrentProject()
 
     const { resetPanorama }  = usePanorama()
+    const { resetPrintProject } = usePrintProject()
     const { clearImages }    = useImageStore()
 
     const id: string = generateId()
     const newProject: Project = {
       id,
       name: 'Untitled Project',
+      type,
       createdAt: Date.now(),
       updatedAt: Date.now()
     }
@@ -196,7 +217,8 @@ export const usePersistence = () => {
     activeProjectName.value = 'Untitled Project'
 
     clearImages()
-    resetPanorama()
+    if (type === 'print') resetPrintProject()
+    else resetPanorama()
 
     await localforage.setItem(ACTIVE_KEY, id)
     await localforage.setItem(PROJECTS_KEY, JSON.parse(JSON.stringify(projects.value)))
@@ -220,6 +242,7 @@ export const usePersistence = () => {
     projects.value = projects.value.filter(p => p.id !== id)
     await localforage.removeItem(panoramaKey(id))
     await localforage.removeItem(imagesKey(id))
+    await localforage.removeItem(printSizeKey(id))
     await localforage.setItem(PROJECTS_KEY, JSON.parse(JSON.stringify(projects.value)))
 
     // If we deleted the active project, switch to the first remaining one
@@ -232,6 +255,7 @@ export const usePersistence = () => {
     projects,
     activeProjectId,
     activeProjectName,
+    activeProjectType: computed(() => projects.value.find(p => p.id === activeProjectId.value)?.type ?? 'social'),
     isLoading,
     initPersistence,
     renameActiveProject,

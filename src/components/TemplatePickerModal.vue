@@ -176,7 +176,7 @@ import { useCustomTemplates } from '@/composables/useCustomTemplates'
 import TemplateMiniPreview from './TemplateMiniPreview.vue'
 import TemplateBuilderModal from './TemplateBuilderModal.vue'
 
-const props = defineProps<{ frame: Frame; panorama: Panorama }>()
+const props = defineProps<{ frame: Frame; panorama: Panorama; printMode?: boolean }>()
 const emit  = defineEmits<{
   apply: [templateId: string, insertFrameIndex: number, outerPx: number, innerPx: number]
   exit: []
@@ -227,6 +227,7 @@ const showGapControls = computed(() => !selectedIsFreeform.value)
 
 const filteredBuiltins = computed<Template[]>(() => {
   return TEMPLATES.filter(t => {
+    if (props.printMode && !t.printCompatible) return false  // print mode: single-frame only
     if (activeFrameCount.value && t.frames.length !== activeFrameCount.value) return false
     if (activeSlotCount.value  && t.slots.length  !== activeSlotCount.value)  return false
     if (activeAspect.value) {

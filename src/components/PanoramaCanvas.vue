@@ -1,7 +1,7 @@
 <template>
   <div class="canvas-area">
-    <!-- Per-frame controls row above the canvas -->
-    <div class="frame-controls-row" :style="frameControlsRowStyle">
+    <!-- Per-frame controls row above the canvas (hidden in print mode) -->
+    <div v-if="!printMode" class="frame-controls-row" :style="frameControlsRowStyle">
       <div
         v-for="(frame, index) in panorama.frames"
         :key="frame.id"
@@ -133,8 +133,8 @@
 
       </div><!-- .panorama-canvas-wrapper -->
 
-      <!-- Add frame button: square, to the right of the canvas -->
-      <div class="frame-add-ctrl" :style="addFrameCtrlStyle">
+      <!-- Add frame button: square, to the right of the canvas (hidden in print mode) -->
+      <div v-if="!printMode" class="frame-add-ctrl" :style="addFrameCtrlStyle">
         <button class="frame-add-btn" @click="addNewFrame" title="Add frame">
           <i class="fa-solid fa-plus"></i>
           <span>Add</span>
@@ -144,6 +144,18 @@
         </select>
       </div>
     </div><!-- .canvas-row -->
+
+    <!-- Safe-zone guides toggle (print mode only) -->
+    <div v-if="printMode" class="safe-zone-toggle">
+      <label>
+        <input type="checkbox" v-model="showSafeZone" />
+        Show safe-zone guides
+      </label>
+      <span class="safe-zone-hint">
+        <span class="guide-swatch bleed"></span> Bleed &nbsp;
+        <span class="guide-swatch safe"></span> Safe zone
+      </span>
+    </div>
 
   </div><!-- .canvas-area -->
 
@@ -159,6 +171,7 @@
     v-if="showTemplatePickerForFrame"
     :frame="showTemplatePickerForFrame"
     :panorama="panorama"
+    :print-mode="printMode"
     @apply="handleTemplateApply"
     @exit="handleExitTemplateModeForFrame(showTemplatePickerForFrame)"
     @cancel="showTemplatePickerForFrame = null"
@@ -183,8 +196,10 @@ import { useCustomTemplates } from '@/composables/useCustomTemplates'
 import ConfirmModal from './ConfirmModal.vue'
 import TemplatePickerModal from './TemplatePickerModal.vue'
 
-const props = defineProps<{ panorama: Panorama }>()
+const props = defineProps<{ panorama: Panorama; printMode?: boolean }>()
 const emit  = defineEmits<{ update: [] }>()
+
+const showSafeZone = ref(false)
 
 const { customTemplates, loadCustomTemplates } = useCustomTemplates()
 loadCustomTemplates()
@@ -424,10 +439,23 @@ const isBottommost = computed(() => selectedImageIndex.value === 0)
 const doLayerOp = (op: 'front' | 'forward' | 'backward' | 'back') => {
   if (!selectedImageId.value) return
   const id = selectedImageId.value
-  if      (op === 'front')    bringToFront(id)
-  else if (op === 'forward')  bringForward(id)
-  else if (op === 'backward') sendBackward(id)
-  else                        sendToBack(id)
+  if (props.printMode) {
+    // Print mode: operate directly on props.panorama to avoid touching social state
+    const arr = props.panorama.placedImages
+    const idx = arr.findIndex(p => p.imageId === id)
+    if (idx === -1) return
+    const delta = op === 'front' ? Infinity : op === 'forward' ? 1 : op === 'backward' ? -1 : -Infinity
+    const newIdx = Math.max(0, Math.min(arr.length - 1, idx + delta))
+    if (newIdx !== idx) {
+      const [img] = arr.splice(idx, 1)
+      arr.splice(newIdx, 0, img!)
+    }
+  } else {
+    if      (op === 'front')    bringToFront(id)
+    else if (op === 'forward')  bringForward(id)
+    else if (op === 'backward') sendBackward(id)
+    else                        sendToBack(id)
+  }
   showContextMenu.value = false
   emit('update')
   render()
@@ -656,7 +684,7 @@ const render = () => {
   if (_rafId) return
   _rafId = requestAnimationFrame(() => {
     _rafId = 0
-    if (canvasRef.value) renderPanorama(canvasRef.value, props.panorama, 1, selectedImageId.value)
+    if (canvasRef.value) renderPanorama(canvasRef.value, props.panorama, 1, selectedImageId.value, true, showSafeZone.value)
   })
 }
 
@@ -1324,4 +1352,37 @@ watch(touchDropPending, (drop) => {
   width: 100%;
   height: 1px;
 }
+
+/* ── Safe-zone toggle (print mode) ─────────────────────────────────────── */
+.safe-zone-toggle {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #4a5568;
+}
+
+.safe-zone-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.safe-zone-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #718096;
+}
+
+.guide-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 2px;
+  border-radius: 1px;
+}
+.guide-swatch.bleed { background: rgba(220, 53, 69, 0.7); }
+.guide-swatch.safe  { background: rgba(0, 123, 255, 0.6); }
 </style>

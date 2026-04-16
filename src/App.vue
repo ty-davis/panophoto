@@ -3,6 +3,8 @@ import { ref, onMounted } from 'vue'
 import ImageLibrary from './components/ImageLibrary.vue'
 import CanvasEditor from './components/CanvasEditor.vue'
 import ExportPanel from './components/ExportPanel.vue'
+import PrintCanvasEditor from './components/PrintCanvasEditor.vue'
+import PrintExportPanel from './components/PrintExportPanel.vue'
 import ProjectModal from './components/ProjectModal.vue'
 import DebugOverlay from './components/DebugOverlay.vue'
 import { usePersistence } from './composables/usePersistence'
@@ -10,7 +12,7 @@ import { usePersistence } from './composables/usePersistence'
 type Tab = 'canvas' | 'export'
 const activeTab = ref<Tab>('canvas')
 
-const { isLoading, activeProjectName, renameActiveProject, initPersistence } = usePersistence()
+const { isLoading, activeProjectName, activeProjectType, renameActiveProject, initPersistence } = usePersistence()
 
 const showProjectModal = ref(false)
 const showHamburger    = ref(false)
@@ -67,6 +69,12 @@ onMounted(() => initPersistence())
         </button>
       </div>
       <div class="header-right">
+        <!-- Project type badge (read-only — set at project creation) -->
+        <div class="project-type-badge" :class="activeProjectType">
+          <i :class="activeProjectType === 'print' ? 'fa-solid fa-print' : 'fa-brands fa-instagram'"></i>
+          <span>{{ activeProjectType === 'print' ? 'Print' : 'Social' }}</span>
+        </div>
+
         <div class="hamburger-wrap">
           <button class="hamburger-btn" @click="showHamburger = !showHamburger" aria-label="Menu">
             <i class="fa-solid fa-bars"></i>
@@ -87,12 +95,20 @@ onMounted(() => initPersistence())
         <ImageLibrary />
       </aside>
 
-      <main class="main-content" :class="{ 'tab-active': activeTab === 'canvas' }">
+      <!-- Social mode -->
+      <main v-if="activeProjectType === 'social'" class="main-content" :class="{ 'tab-active': activeTab === 'canvas' }">
         <CanvasEditor />
       </main>
-
-      <aside class="sidebar-right" :class="{ 'tab-active': activeTab === 'export' }">
+      <aside v-if="activeProjectType === 'social'" class="sidebar-right" :class="{ 'tab-active': activeTab === 'export' }">
         <ExportPanel />
+      </aside>
+
+      <!-- Print mode -->
+      <main v-if="activeProjectType === 'print'" class="main-content" :class="{ 'tab-active': activeTab === 'canvas' }">
+        <PrintCanvasEditor />
+      </main>
+      <aside v-if="activeProjectType === 'print'" class="sidebar-right" :class="{ 'tab-active': activeTab === 'export' }">
+        <PrintExportPanel />
       </aside>
     </div>
 
@@ -217,7 +233,36 @@ body {
 }
 .project-name-input::placeholder { color: rgba(255,255,255,0.6); }
 
-.header-right { flex-shrink: 0; }
+.header-right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── Project type badge ─────────────────────────────────────────────────── */
+.project-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.375rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.project-type-badge.social {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.35);
+}
+.project-type-badge.print {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.35);
+}
 
 .hamburger-wrap { position: relative; }
 

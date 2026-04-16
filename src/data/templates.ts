@@ -118,31 +118,31 @@ const singleFrameTemplates = (ar: typeof sq): Template[] => {
   return [
     { id: `${ar.name}-1-full`,  name: `${name} — Full`,
       frames: [{ aspectRatio: ar }], generateSlots: genFull,
-      slots: genFull(tw, mh, O, I) },
+      slots: genFull(tw, mh, O, I), printCompatible: true },
 
     { id: `${ar.name}-2-lr`,    name: `${name} — Left/Right`,
       frames: [{ aspectRatio: ar }], generateSlots: genLR,
-      slots: genLR(tw, mh, O, I) },
+      slots: genLR(tw, mh, O, I), printCompatible: true },
 
     { id: `${ar.name}-2-tb`,    name: `${name} — Top/Bottom`,
       frames: [{ aspectRatio: ar }], generateSlots: genTB,
-      slots: genTB(tw, mh, O, I) },
+      slots: genTB(tw, mh, O, I), printCompatible: true },
 
     { id: `${ar.name}-2-6040`,  name: `${name} — 60/40`,
       frames: [{ aspectRatio: ar }], generateSlots: gen6040,
-      slots: gen6040(tw, mh, O, I) },
+      slots: gen6040(tw, mh, O, I), printCompatible: true },
 
     { id: `${ar.name}-3-cols`,  name: `${name} — 3 Columns`,
       frames: [{ aspectRatio: ar }], generateSlots: gen3Cols,
-      slots: gen3Cols(tw, mh, O, I) },
+      slots: gen3Cols(tw, mh, O, I), printCompatible: true },
 
     { id: `${ar.name}-3-l2r`,   name: `${name} — Large Left + 2 Right`,
       frames: [{ aspectRatio: ar }], generateSlots: genL2R,
-      slots: genL2R(tw, mh, O, I) },
+      slots: genL2R(tw, mh, O, I), printCompatible: true },
 
     { id: `${ar.name}-4-grid`,  name: `${name} — 2×2 Grid`,
       frames: [{ aspectRatio: ar }], generateSlots: gen2x2,
-      slots: gen2x2(tw, mh, O, I) },
+      slots: gen2x2(tw, mh, O, I), printCompatible: true },
   ]
 }
 

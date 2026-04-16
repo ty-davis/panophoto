@@ -48,6 +48,7 @@ export interface Template {
   isCustom?: boolean
   templateType?: 'grid' | 'freeform'
   tree?: SplitNode  // grid templates only
+  printCompatible?: boolean  // true for single-frame templates suitable for print mode
 }
 
 /**
@@ -113,4 +114,25 @@ export interface Panorama {
 export interface ExportOptions {
   format: 'png' | 'jpeg'
   quality: number
+}
+
+// ── Print types ───────────────────────────────────────────────────────────────
+
+export interface PrintSize {
+  name: string
+  label: string          // e.g. '4×6 Portrait'
+  widthIn: number        // physical width in inches
+  heightIn: number       // physical height in inches
+  dpi: number
+}
+
+/** Convert a PrintSize to a pixel-based AspectRatio for use with the canvas engine. */
+export function printSizeToAspectRatio(size: PrintSize): AspectRatio {
+  return {
+    name: size.name,
+    label: size.label,
+    ratio: size.widthIn / size.heightIn,
+    width:  Math.round(size.widthIn  * size.dpi),
+    height: Math.round(size.heightIn * size.dpi),
+  }
 }
