@@ -145,17 +145,7 @@
       </div>
     </div><!-- .canvas-row -->
 
-    <!-- Safe-zone guides toggle (print mode only) -->
-    <div v-if="printMode" class="safe-zone-toggle">
-      <label>
-        <input type="checkbox" v-model="showSafeZone" />
-        Show safe-zone guides
-      </label>
-      <span class="safe-zone-hint">
-        <span class="guide-swatch bleed"></span> Bleed &nbsp;
-        <span class="guide-swatch safe"></span> Safe zone
-      </span>
-    </div>
+    <!-- Print guides bar is rendered by PrintCanvasEditor, not here -->
 
   </div><!-- .canvas-area -->
 
@@ -196,10 +186,10 @@ import { useCustomTemplates } from '@/composables/useCustomTemplates'
 import ConfirmModal from './ConfirmModal.vue'
 import TemplatePickerModal from './TemplatePickerModal.vue'
 
-const props = defineProps<{ panorama: Panorama; printMode?: boolean }>()
+const props = defineProps<{ panorama: Panorama; printMode?: boolean; bleedIn?: number; showGuides?: boolean; printBleedPx?: number }>()
 const emit  = defineEmits<{ update: [] }>()
 
-const showSafeZone = ref(false)
+
 
 const { customTemplates, loadCustomTemplates } = useCustomTemplates()
 loadCustomTemplates()
@@ -302,6 +292,7 @@ const handleTemplateApply = (templateId: string, insertFrameIndex: number, outer
     replaceFrameIds: replaceFrameIds.length ? replaceFrameIds : undefined,
     outerPx,
     innerPx,
+    trimOffset: props.printBleedPx ?? 0,
   })
 
   // Re-assign harvested images to the new template's slots, preserving pan/zoom
@@ -684,7 +675,7 @@ const render = () => {
   if (_rafId) return
   _rafId = requestAnimationFrame(() => {
     _rafId = 0
-    if (canvasRef.value) renderPanorama(canvasRef.value, props.panorama, 1, selectedImageId.value, true, showSafeZone.value)
+    if (canvasRef.value) renderPanorama(canvasRef.value, props.panorama, 1, selectedImageId.value, true, props.showGuides ?? false, props.bleedIn ?? 0)
   })
 }
 
@@ -936,6 +927,8 @@ onUnmounted(() => {
 
 watch(() => props.panorama, render, { deep: true })
 watch(selectedImageId, render)
+watch(() => props.showGuides, render)
+watch(() => props.bleedIn, render)
 
 // Handle touch drops from the image tray
 watch(touchDropPending, (drop) => {
@@ -1356,34 +1349,12 @@ defineExpose({ openTemplatePicker })
 }
 
 /* ── Safe-zone toggle (print mode) ─────────────────────────────────────── */
-.safe-zone-toggle {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 0.5rem;
-  font-size: 0.8rem;
-  color: #4a5568;
-}
-
-.safe-zone-toggle label {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  cursor: pointer;
-}
-
-.safe-zone-hint {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  color: #718096;
-}
-
 .guide-swatch {
   display: inline-block;
   width: 18px;
   height: 2px;
   border-radius: 1px;
+  flex-shrink: 0;
 }
 .guide-swatch.bleed { background: rgba(220, 53, 69, 0.7); }
 .guide-swatch.safe  { background: rgba(0, 123, 255, 0.6); }

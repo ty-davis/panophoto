@@ -11,7 +11,9 @@ export const useCanvas = () => {
     scale: number = 1,
     selectedImageId?: string | null,
     showFrameBoundaries: boolean = true,
-    showSafeZone: boolean = false
+    showSafeZone: boolean = false,
+    bleedIn: number = 0.25,
+    dpi: number = 300
   ): void => {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -102,23 +104,25 @@ export const useCanvas = () => {
     }
 
     // Draw optional print safe-zone / bleed guides
-    if (showSafeZone) {
-      // 0.125 inch bleed at 300 DPI = 37.5px — use a standard 1/8" safe margin
-      const safeMarginFraction = 0.04  // ~4% inset, visually close to 1/8" on typical print sizes
-      const smx = canvas.width  * safeMarginFraction
-      const smy = canvas.height * safeMarginFraction
+    if (showSafeZone && bleedIn > 0) {
+      // Trim line: at bleedIn inches from the canvas edge (the intended cut line)
+      const trimPx = bleedIn * dpi * scale
+      // Safe-zone line: 0.125" inward from the trim line
+      const safePx = (bleedIn + 0.125) * dpi * scale
 
       ctx.save()
-      // Outer bleed line (red dashes) — marks edge of printable area
+
+      // Trim line (red dashes) — marks the intended cut / bleed boundary
       ctx.strokeStyle = 'rgba(220, 53, 69, 0.7)'
       ctx.lineWidth = 1.5 * scale
       ctx.setLineDash([6 * scale, 4 * scale])
-      ctx.strokeRect(smx / 2, smy / 2, canvas.width - smx, canvas.height - smy)
+      ctx.strokeRect(trimPx, trimPx, canvas.width - 2 * trimPx, canvas.height - 2 * trimPx)
 
-      // Inner safe-zone line (blue dashes) — keep important content inside
+      // Safe-zone line (blue dashes) — keep important content inside this boundary
       ctx.strokeStyle = 'rgba(0, 123, 255, 0.6)'
       ctx.setLineDash([4 * scale, 4 * scale])
-      ctx.strokeRect(smx, smy, canvas.width - 2 * smx, canvas.height - 2 * smy)
+      ctx.strokeRect(safePx, safePx, canvas.width - 2 * safePx, canvas.height - 2 * safePx)
+
       ctx.setLineDash([])
       ctx.restore()
     }

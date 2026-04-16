@@ -106,6 +106,12 @@ export interface ApplyTemplateOptions {
   outerPx?: number
   /** Inner gap between slots in pixels (default: DEFAULT_INNER_PX). */
   innerPx?: number
+  /**
+   * Bleed pixels to exclude from the layout area (print mode only).
+   * When set, slots are applied to the inner trim area rather than the full canvas.
+   * e.g. 75 means slots start at (75, 75) and cover (frameW-150) × (frameH-150).
+   */
+  trimOffset?: number
 }
 
 export function applyTemplate(opts: ApplyTemplateOptions): { templateGroupId: string } {
@@ -121,22 +127,26 @@ export function applyTemplate(opts: ApplyTemplateOptions): { templateGroupId: st
       ?? panorama.frames[insertIndex]
     if (!targetFrame) return { templateGroupId }
 
-    const tmplW = targetFrame.aspectRatio.width
-    const tmplH = targetFrame.aspectRatio.height
+    const trimOffset = opts.trimOffset ?? 0
+    // When outer margin is 0, slots extend to the full canvas edge (full-bleed).
+    // trimOffset only applies when there's an outer margin to anchor it to.
+    const effectiveTrim = outerPx > 0 ? trimOffset : 0
+    const tmplW = targetFrame.aspectRatio.width  - 2 * effectiveTrim
+    const tmplH = targetFrame.aspectRatio.height - 2 * effectiveTrim
     const { xOffset } = targetFrame
+    const originX = xOffset + effectiveTrim
+    const originY = (panorama.maxHeight - targetFrame.aspectRatio.height) / 2 + effectiveTrim
 
-    // Clean up free images in this frame's x-range (template images were already
-    // harvested and removed by PanoramaCanvas before this is called)
+    // Clean up free images in this frame's x-range
     panorama.placedImages = panorama.placedImages.filter(img =>
-      !(img.x + img.width > xOffset && img.x < xOffset + tmplW)
+      !(img.x + img.width > xOffset && img.x < xOffset + targetFrame.aspectRatio.width)
     )
 
-    const verticalOffset = (panorama.maxHeight - tmplH) / 2
     const canvasSlots: TemplateSlotBinding[] = template.generateSlots(tmplW, tmplH, outerPx, innerPx).map(slot => ({
       templateGroupId,
       slotId:  slot.id,
-      slotX:   xOffset + slot.x * tmplW,
-      slotY:   verticalOffset + slot.y * tmplH,
+      slotX:   originX + slot.x * tmplW,
+      slotY:   originY + slot.y * tmplH,
       slotW:   slot.w * tmplW,
       slotH:   slot.h * tmplH,
     }))
