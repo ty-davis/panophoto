@@ -955,6 +955,8 @@ watch(touchDropPending, (drop) => {
   emit('update')
   touchDropPending.value = null
 })
+
+defineExpose({ openTemplatePicker })
 </script>
 
 <style scoped>

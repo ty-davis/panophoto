@@ -1,11 +1,12 @@
 <template>
   <div class="print-canvas-editor">
     <div class="editor-header">
-      <div class="print-info">
-        <span class="print-size-label">{{ activePrintSize.label }}</span>
-        <span class="canvas-size">{{ pixelW }}×{{ pixelH }}px @ {{ activePrintSize.dpi }} DPI</span>
-      </div>
+      <PrintSizePicker :model-value="activePrintSize" @update:model-value="setPrintSize" />
       <div class="header-right">
+        <span class="canvas-size">{{ pixelW }}×{{ pixelH }}px @ {{ activePrintSize.dpi }} DPI</span>
+        <button class="tmpl-btn" @click="openTemplate" title="Choose template">
+          <i class="fa-solid fa-table-cells"></i> Template
+        </button>
         <div v-if="printPanorama" class="color-swatch-wrap" title="Background color">
           <div class="swatch-preview" :style="{ background: printPanorama.backgroundColor }"></div>
           <input
@@ -18,13 +19,10 @@
       </div>
     </div>
 
-    <div class="size-picker-row">
-      <PrintSizePicker :model-value="activePrintSize" @update:model-value="setPrintSize" />
-    </div>
-
     <div class="canvas-container">
       <PanoramaCanvas
         v-if="printPanorama"
+        ref="canvasRef"
         :panorama="printPanorama"
         :print-mode="true"
         @update="() => {}"
@@ -36,8 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { PrintSize } from '@/types'
+import { ref, computed } from 'vue'
 import { printSizeToAspectRatio } from '@/types'
 import { usePrintProject } from '@/composables/usePrintProject'
 import PanoramaCanvas from './PanoramaCanvas.vue'
@@ -49,6 +46,13 @@ const { activePrintSize, printPanorama, setPrintSize, updatePrintBackground } = 
 const ar     = computed(() => printSizeToAspectRatio(activePrintSize.value))
 const pixelW = computed(() => ar.value.width)
 const pixelH = computed(() => ar.value.height)
+
+const canvasRef = ref<InstanceType<typeof PanoramaCanvas> | null>(null)
+
+const openTemplate = () => {
+  const frame = printPanorama.value?.frames[0]
+  if (frame) canvasRef.value?.openTemplatePicker(frame)
+}
 
 const updateBgColor = (event: Event) => {
   updatePrintBackground((event.target as HTMLInputElement).value)
@@ -67,34 +71,45 @@ const updateBgColor = (event: Event) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
   background: white;
   border-bottom: 1px solid #e2e8f0;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
-.print-info {
+.tmpl-btn {
   display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid #cbd5e0;
+  border-radius: 0.375rem;
+  background: white;
+  font-size: 0.8rem;
+  color: #4a5568;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
-
-.print-size-label {
-  font-weight: 600;
-  color: #2d3748;
-  font-size: 1.125rem;
+.tmpl-btn:hover {
+  border-color: #667eea;
+  background: #ebf4ff;
+  color: #667eea;
 }
 
 .canvas-size {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #718096;
   font-family: 'Courier New', monospace;
+  white-space: nowrap;
 }
 
 .color-swatch-wrap {
@@ -126,13 +141,6 @@ const updateBgColor = (event: Event) => {
   cursor: pointer;
   padding: 0;
   border: none;
-}
-
-.size-picker-row {
-  padding: 0.75rem 1rem;
-  background: white;
-  border-bottom: 1px solid #e2e8f0;
-  flex-shrink: 0;
 }
 
 .canvas-container {
